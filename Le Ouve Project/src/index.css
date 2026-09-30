@@ -36,3 +36,8 @@
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+/* ເພີ່ມຕໍ່ທ້າຍ src/index.css */
+.mask-fade-vertical {
+  mask-image: linear-gradient(to bottom, transparent 0%, black 10%, black 90%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 10%, black 90%, transparent 100%);
+}
