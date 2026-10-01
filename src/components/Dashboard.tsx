@@ -4,12 +4,14 @@ import {
   AreaChart, Area
 } from 'recharts';
 import { 
-  RefreshCcw, TrendingUp, Activity, Zap, Triangle, History, BrainCircuit, 
-  Loader2, X, Search, ChevronRight, Package 
+  TrendingUp, TrendingDown, DollarSign, Percent, 
+  ShoppingBag, PieChart, Activity, Zap, RefreshCcw, BrainCircuit,
+  ArrowUpRight, ArrowDownRight, Layers
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { collection, query, onSnapshot } from 'firebase/firestore';
+import { db } from '../firebase';
 import { format, subDays, isSameDay } from 'date-fns';
-import axios from 'axios';
 import { User } from 'firebase/auth';
 
 interface DashboardProps {
@@ -19,223 +21,259 @@ interface DashboardProps {
 
 export default function Dashboard({ userSettings, user }: DashboardProps) {
   const { i18n } = useTranslation();
-  const [loading, setLoading] = useState(false);
-  const [rawMovements, setRawMovements] = useState<any[]>([]);
-  const [inventoryBalances, setInventoryBalances] = useState<any[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [syncing, setSyncing] = useState(false);
-  const [lastSynced, setLastSynced] = useState<string | null>(null);
+  const [transactions, setTransactions] = useState<any[]>([]);
+  const [supplierPrices, setSupplierPrices] = useState<any[]>([]);
+  const [products, setProducts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const [showInventoryModal, setShowInventoryModal] = useState(false);
-  const [showMovementsModal, setShowMovementsModal] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [currentQuoteIdx, setCurrentQuoteIdx] = useState(0);
-
-  const tips = useMemo(() => [
-    {
-      la: "ການຈັດການສາງສິນຄ້າທີ່ດີ ຄືຫົວໃຈຂອງຮ້ານຄ້າ Le Ouve!",
-      en: "Good stock planning is the heartbeat of retail!",
-      emoji: "💡",
-      color: "border-sky-500/20 bg-sky-500/5 text-sky-600 dark:text-sky-400"
-    },
-    {
-      la: "ຫຼຸດຕົ້ນທຶນ ເພີ່ມປະສິດທິພາບ ສ້າງກຳໄລທີ່ຍືນຍົງ",
-      en: "Reduce costs, maximize flow, build durable profits.",
-      emoji: "🚀",
-      color: "border-emerald-500/20 bg-emerald-500/5 text-emerald-600 dark:text-emerald-400"
-    },
-    {
-      la: "ຕິດຕາມທຸກການເຄື່ອນໄຫວ ເພື່ອການຕັດສິນໃຈທີ່ຖືກຕ້ອງ",
-      en: "Every stock move tells a story—learn from your data flow.",
-      emoji: "📊",
-      color: "border-violet-500/20 bg-violet-500/5 text-violet-600 dark:text-violet-400"
-    }
-  ], []);
-
-  const getLaoGreeting = () => {
-    const hours = new Date().getHours();
-    if (hours < 12) return { text: "ສະບາຍດີຕອນເຊົ້າ", emoji: "🌅" };
-    if (hours < 17) return { text: "ສະບາຍດີຍາມບ່າຍ", emoji: "☀️" };
-    return { text: "ສະບາຍດີຕອນແລງ", emoji: "🌙" };
-  };
-
-  const greeting = getLaoGreeting();
-
-  const fetchMatrixData = async () => {
-    if (!userSettings?.googleSheetsId) return;
-    setSyncing(true);
-    setError(null);
-    try {
-      const [movementsRes, inventoryRes] = await Promise.all([
-        axios.get(`/api/sheets/stock-data/${userSettings.googleSheetsId}`),
-        axios.get(`/api/sheets/inventory/${userSettings.googleSheetsId}`)
-      ]);
-
-      const moveValues = movementsRes.data.values || [];
-      let mData: any[] = [];
-      if (moveValues.length > 0) {
-        mData = moveValues.slice(1).map((row: any[]) => ({
-          date: row[0] || '',
-          item: String(row[1] || '').trim(),
-          type: String(row[2] || 'OUT').toUpperCase().includes('IN') ? 'IN' : 'OUT',
-          quantity: parseFloat(String(row[3] || '0').replace(/[^0-9.]/g, '')) || 0
-        })).filter(m => m.item);
-        setRawMovements(mData);
-      }
-
-      const invValues = inventoryRes.data.values || [];
-      let iData: any[] = [];
-      if (invValues.length > 0) {
-        iData = invValues.slice(1).map((row: any[]) => ({
-          name: String(row[0] || '').trim(),
-          totalIn: parseFloat(String(row[1] || '0')) || 0,
-          totalOut: parseFloat(String(row[2] || '0')) || 0,
-          current: parseFloat(String(row[3] || '0')) || 0,
-          minStock: parseFloat(String(row[4] || '10')) || 10
-        })).filter(i => i.name);
-        setInventoryBalances(iData);
-      }
-    } catch (err: any) {
-      setError("Matrix Sync: Verify your Google Sheets integration in Settings.");
-    } finally {
-      setLoading(false);
-      setSyncing(false);
-      setLastSynced(new Date().toLocaleTimeString());
-    }
-  };
-
+  // Subscribe transactions and supplier purchase orders
   useEffect(() => {
-    fetchMatrixData();
-  }, [userSettings?.googleSheetsId]);
+    const unsubTx = onSnapshot(query(collection(db, 'transactions')), snap => {
+      setTransactions(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
 
-  const analytics = useMemo(() => {
-    const stockHealth = inventoryBalances.map(item => {
-      const current = parseFloat(item.current) || 0;
-      const min = parseFloat(item.minStock) || 0;
-      const isCritical = current <= min;
-      const isWarning = current <= (min * 1.5);
-      const capacity = min > 0 ? min * 3 : 20;
-      const health = Math.min(100, Math.round((current / capacity) * 100));
+    const unsubPrices = onSnapshot(query(collection(db, 'supplierPrices')), snap => {
+      setSupplierPrices(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+
+    const unsubProd = onSnapshot(query(collection(db, 'products')), snap => {
+      setProducts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setLoading(false);
+    });
+
+    return () => { unsubTx(); unsubPrices(); unsubProd(); };
+  }, []);
+
+  // 📊 Realtime Financial KPI Calculator (Gross Margin, COGS, Net Profit, ROI, Total Revenue)
+  const financeKPIs = useMemo(() => {
+    let totalRevenue = 0;
+    let operatingExpenses = 0;
+
+    // 1. Total Revenue from transactions
+    transactions.forEach(t => {
+      const amt = Number(t.amount) || 0;
+      if (t.type === 'income') {
+        totalRevenue += amt;
+      } else {
+        operatingExpenses += amt;
+      }
+    });
+
+    // 2. COGS (Cost of Goods Sold / Purchasing Spend)
+    // ຄິດໄລ່ຈາກຍອດຊື້ວັດຖຸດິບຕົວຈິງຈາກ Suppliers ຫຼື ໝວດໝູ່ 'Raw Materials'
+    let cogsPurchasing = supplierPrices.reduce((sum, sp) => {
+      const totalLAK = sp.totalPriceLAK !== undefined 
+        ? Number(sp.totalPriceLAK || 0) 
+        : (sp.currency === 'LAK' ? Number(sp.priceOriginal || 0) : Number(sp.priceOriginal || 0) * Number(sp.exchangeRate || 1));
+      return sum + totalLAK;
+    }, 0);
+
+    // ຖ້າບໍ່ມີການບັນທຶກ Supplier Prices, ດຶງຈາກລາຍຈ່າຍໝວດໝູ່ ຊື້ວັດຖຸດິບ (Raw Materials)
+    if (cogsPurchasing === 0) {
+      cogsPurchasing = transactions
+        .filter(t => t.type === 'expense' && (t.category?.includes('Raw') || t.category?.includes('ວັດຖຸດິບ')))
+        .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+    }
+
+    // 3. Gross Profit & Gross Margin %
+    const grossProfit = totalRevenue - cogsPurchasing;
+    const grossMarginPercent = totalRevenue > 0 ? (grossProfit / totalRevenue) * 100 : 0;
+
+    // 4. Net Profit (ກຳໄລສຸດທິ = ລາຍຮັບ - ລາຍຈ່າຍທັງໝົດ)
+    const totalCostsAndExpenses = Math.max(operatingExpenses, cogsPurchasing);
+    const netProfit = totalRevenue - totalCostsAndExpenses;
+    const netMarginPercent = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
+
+    // 5. ROI % (Return on Investment = (Net Profit / Total Investment/COGS) * 100)
+    const investmentBase = totalCostsAndExpenses > 0 ? totalCostsAndExpenses : 1;
+    const roiPercent = (netProfit / investmentBase) * 100;
+
+    return {
+      totalRevenue,
+      cogsPurchasing,
+      grossProfit,
+      grossMarginPercent,
+      netProfit,
+      netMarginPercent,
+      roiPercent
+    };
+  }, [transactions, supplierPrices]);
+
+  // 7-Day Revenue vs Expense Trend Chart
+  const chartData = useMemo(() => {
+    const last7Days = Array.from({ length: 7 }, (_, i) => subDays(new Date(), 6 - i));
+    return last7Days.map(date => {
+      const dayStr = format(date, 'yyyy-MM-dd');
+      let rev = 0;
+      let exp = 0;
+
+      transactions.forEach(t => {
+        if (t.date === dayStr) {
+          const amt = Number(t.amount) || 0;
+          if (t.type === 'income') rev += amt;
+          else exp += amt;
+        }
+      });
 
       return {
-        name: item.name,
-        health,
-        current,
-        min,
-        status: isCritical ? 'Critical' : isWarning ? 'Warning' : 'Healthy'
+        day: format(date, 'EEE'),
+        fullDate: dayStr,
+        Revenue: rev,
+        Expenses: exp
       };
     });
-
-    const last7Days = Array.from({ length: 7 }, (_, i) => subDays(new Date(), 6 - i));
-    const trendsByDay = last7Days.map(date => ({
-      day: format(date, 'EEE'),
-      fullDate: date,
-      in: 0,
-      out: 0
-    }));
-
-    rawMovements.forEach(m => {
-      const mDate = new Date(m.date);
-      if (!isNaN(mDate.getTime())) {
-        const found = trendsByDay.find(t => isSameDay(t.fullDate, mDate));
-        if (found) {
-          if (m.type === 'IN') found.in += m.quantity;
-          else found.out += m.quantity;
-        }
-      }
-    });
-
-    return { stockHealth, trends: trendsByDay };
-  }, [rawMovements, inventoryBalances]);
+  }, [transactions]);
 
   return (
-    <div className="space-y-6 font-sans">
-      <div className="flex items-center justify-between py-2">
+    <div className="space-y-6 font-sans pb-16">
+      {/* Top Banner */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white dark:bg-[#141414] p-6 rounded-3xl border border-slate-200 dark:border-neutral-800">
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-primary/10 rounded-lg">
-            <BrainCircuit className="w-5 h-5 text-primary animate-pulse" />
+          <div className="w-10 h-10 rounded-2xl bg-[#052659] text-white flex items-center justify-center font-black">
+            LO
           </div>
           <div>
-            <h2 className="text-sm font-black uppercase tracking-widest text-[#052659] dark:text-white">Le Ouve Intelligence Hub</h2>
-            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-tighter">
-              {lastSynced ? `Synced: ${lastSynced} • ${inventoryBalances.length} Items` : 'Ready to Sync'}
+            <h2 className="text-base font-black uppercase text-slate-800 dark:text-white tracking-wide">
+              Le Ouve Executive Dashboard
+            </h2>
+            <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">
+              Live Business Analytics & Financial Metrics
             </p>
           </div>
         </div>
-        <button 
-          onClick={fetchMatrixData} 
-          disabled={syncing}
-          className="crystal-button !py-2 !px-4 flex items-center gap-2 cursor-pointer"
-        >
-          <RefreshCcw className={`w-3 h-3 ${syncing ? 'animate-spin' : ''}`} />
-          <span className="text-[10px] font-black uppercase">{syncing ? 'SYNCING...' : 'SYNC SHEETS'}</span>
-        </button>
-      </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="md:col-span-2 glass-card p-6 bg-white dark:bg-white/5 border border-slate-100 dark:border-white/10 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <span className="text-4xl">{greeting.emoji}</span>
-            <div>
-              <h3 className="text-sm font-black uppercase text-[#052659] dark:text-white">
-                {greeting.text}, {user?.displayName || 'Partner'}!
-              </h3>
-              <p className="text-[10px] text-slate-400 font-bold uppercase mt-1">
-                {format(new Date(), 'EEEE, dd MMMM yyyy')}
-              </p>
-            </div>
-          </div>
-          <span className="px-3 py-1 bg-emerald-500/10 text-emerald-600 rounded-full text-[9px] font-black uppercase">Online</span>
-        </div>
-
-        <div 
-          onClick={() => setCurrentQuoteIdx((prev) => (prev + 1) % tips.length)}
-          className={`glass-card p-6 border cursor-pointer flex flex-col justify-between ${tips[currentQuoteIdx].color}`}
-        >
-          <span className="text-[8px] font-black uppercase tracking-widest opacity-60">LE OUVE INSPIRATION • TAP TO SWAP</span>
-          <p className="text-xs font-black leading-tight mt-1">{tips[currentQuoteIdx].la}</p>
+        <div className="flex items-center gap-2">
+          <span className="px-3 py-1 bg-emerald-500/10 text-emerald-500 rounded-full text-[9px] font-black uppercase tracking-wider border border-emerald-500/20">
+            Realtime Synced
+          </span>
         </div>
       </div>
 
-      {/* Stock Health & IN/OUT Trends */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="high-density-card flex flex-col h-[350px]">
-          <h3 className="label-xs flex items-center gap-2 mb-4">
-            <Activity className="w-3 h-3 text-emerald-500" />
-            Stock Health Analysis
+      {/* 🚀 EXECUTIVE FINANCIAL KPI METRICS ROW (5 ຕົວຊີ້ວັດການເງິນ) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
+        
+        {/* 1. Total Revenue */}
+        <div className="high-density-card p-5 border-t-4 border-t-sky-500">
+          <div className="flex justify-between items-center">
+            <span className="label-xs">Total Revenue (ຍອດຂາຍ)</span>
+            <DollarSign className="w-4 h-4 text-sky-500" />
+          </div>
+          <h3 className="text-xl font-black text-slate-900 dark:text-white font-mono mt-2">
+            {financeKPIs.totalRevenue.toLocaleString()} ₭
           </h3>
-          <div className="flex-1 overflow-y-auto space-y-4 pr-1">
-            {analytics.stockHealth.map((item, idx) => (
-              <div key={idx} className="space-y-1 text-xs">
-                <div className="flex justify-between font-bold">
-                  <span>{item.name}</span>
-                  <span className={item.status === 'Critical' ? 'text-red-500' : 'text-emerald-500'}>{item.current} in stock</span>
-                </div>
-                <div className="h-1.5 w-full bg-slate-100 dark:bg-white/10 rounded-full overflow-hidden">
-                  <div className={`h-full ${item.status === 'Critical' ? 'bg-red-500' : 'bg-emerald-500'}`} style={{ width: `${item.health}%` }}></div>
-                </div>
-              </div>
-            ))}
+          <span className="text-[9px] text-sky-500 font-bold uppercase mt-1 block">
+            ລາຍຮັບລວມທັງໝົດ
+          </span>
+        </div>
+
+        {/* 2. COGS (Purchasing) */}
+        <div className="high-density-card p-5 border-t-4 border-t-amber-500">
+          <div className="flex justify-between items-center">
+            <span className="label-xs">COGS / Purchasing (ຕົ້ນທຶນ)</span>
+            <ShoppingBag className="w-4 h-4 text-amber-500" />
+          </div>
+          <h3 className="text-xl font-black text-slate-900 dark:text-white font-mono mt-2">
+            {financeKPIs.cogsPurchasing.toLocaleString()} ₭
+          </h3>
+          <span className="text-[9px] text-amber-500 font-bold uppercase mt-1 block">
+            ຄ່າຈັດຊື້ & ວັດຖຸດິບ
+          </span>
+        </div>
+
+        {/* 3. Gross Margin % */}
+        <div className="high-density-card p-5 border-t-4 border-t-indigo-500">
+          <div className="flex justify-between items-center">
+            <span className="label-xs">Gross Margin %</span>
+            <Percent className="w-4 h-4 text-indigo-500" />
+          </div>
+          <h3 className={`text-xl font-black font-mono mt-2 ${financeKPIs.grossMarginPercent >= 0 ? 'text-indigo-600 dark:text-indigo-400' : 'text-rose-500'}`}>
+            {financeKPIs.grossMarginPercent.toFixed(1)}%
+          </h3>
+          <span className="text-[9px] text-slate-400 font-bold uppercase mt-1 block">
+            ກຳໄລຂັ້ນຕົ້ນ: {financeKPIs.grossProfit.toLocaleString()} ₭
+          </span>
+        </div>
+
+        {/* 4. Net Profit */}
+        <div className="high-density-card p-5 border-t-4 border-t-emerald-500">
+          <div className="flex justify-between items-center">
+            <span className="label-xs">Net Profit (ກຳໄລສຸດທິ)</span>
+            <TrendingUp className="w-4 h-4 text-emerald-500" />
+          </div>
+          <h3 className={`text-xl font-black font-mono mt-2 ${financeKPIs.netProfit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>
+            {financeKPIs.netProfit.toLocaleString()} ₭
+          </h3>
+          <span className={`text-[9px] font-bold uppercase mt-1 block ${financeKPIs.netProfit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+            Net Margin: {financeKPIs.netMarginPercent.toFixed(1)}%
+          </span>
+        </div>
+
+        {/* 5. ROI % */}
+        <div className="high-density-card p-5 border-t-4 border-t-purple-500">
+          <div className="flex justify-between items-center">
+            <span className="label-xs">ROI % (ຜົນຕອບແທນ)</span>
+            <PieChart className="w-4 h-4 text-purple-500" />
+          </div>
+          <h3 className={`text-xl font-black font-mono mt-2 ${financeKPIs.roiPercent >= 0 ? 'text-purple-600 dark:text-purple-400' : 'text-rose-500'}`}>
+            {financeKPIs.roiPercent.toFixed(1)}%
+          </h3>
+          <span className="text-[9px] text-purple-500 font-bold uppercase mt-1 block">
+            Return on Investment
+          </span>
+        </div>
+
+      </div>
+
+      {/* Charts Section */}
+      <div className="high-density-card p-6">
+        <div className="flex justify-between items-center mb-6">
+          <div>
+            <h3 className="text-sm font-black uppercase text-slate-800 dark:text-white tracking-wide">
+              Revenue vs Expenses Trend (7 ວັນ)
+            </h3>
+            <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">
+              ການປຽບທຽບກະແສເງິນສົດເຂົ້າ-ອອກ
+            </p>
+          </div>
+          <div className="flex gap-4 text-xs font-bold font-mono">
+            <span className="flex items-center gap-1.5 text-emerald-500">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> Revenue
+            </span>
+            <span className="flex items-center gap-1.5 text-rose-500">
+              <span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span> Expenses
+            </span>
           </div>
         </div>
 
-        <div className="lg:col-span-2 high-density-card flex flex-col h-[350px]">
-          <h3 className="label-xs flex items-center gap-2 mb-4">
-            <TrendingUp className="w-3 h-3 text-primary" />
-            IN vs OUT (7-Day Movement)
-          </h3>
-          <div className="flex-1">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={analytics.trends}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
-                <XAxis dataKey="day" fontSize={10} axisLine={false} tickLine={false} />
-                <YAxis fontSize={10} axisLine={false} tickLine={false} />
-                <Tooltip contentStyle={{ borderRadius: '12px', fontSize: '11px', fontWeight: 800 }} />
-                <Area type="monotone" dataKey="in" stroke="#94A3B8" fill="transparent" strokeWidth={2} />
-                <Area type="monotone" dataKey="out" stroke="#052659" fill="#052659" fillOpacity={0.1} strokeWidth={3} />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
+        <div className="h-[280px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={chartData}>
+              <defs>
+                <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#10b981" stopOpacity={0.2}/>
+                  <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                </linearGradient>
+                <linearGradient id="colorExp" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.2}/>
+                  <stop offset="95%" stopColor="#f43f5e" stopOpacity={0}/>
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#262626" opacity={0.3} />
+              <XAxis dataKey="day" fontSize={10} axisLine={false} tickLine={false} />
+              <YAxis fontSize={10} axisLine={false} tickLine={false} />
+              <Tooltip 
+                contentStyle={{ 
+                  backgroundColor: '#141414', 
+                  borderRadius: '12px', 
+                  border: '1px solid rgba(255,255,255,0.1)', 
+                  color: '#fff',
+                  fontSize: '11px' 
+                }} 
+              />
+              <Area type="monotone" dataKey="Revenue" stroke="#10b981" fill="url(#colorRev)" strokeWidth={2.5} />
+              <Area type="monotone" dataKey="Expenses" stroke="#f43f5e" fill="url(#colorExp)" strokeWidth={2.5} />
+            </AreaChart>
+          </ResponsiveContainer>
         </div>
       </div>
     </div>
