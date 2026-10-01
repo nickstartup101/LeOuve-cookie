@@ -8,8 +8,8 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['"DM Sans"', '"Noto Sans Lao"', 'sans-serif'],
-        mono: ['"DM Mono"', 'monospace'],
+        sans: ['"DM Serif Display"', '"DM Serif Text"', '"Noto Sans Lao"', 'serif'],
+        serif: ['"DM Serif Display"', '"DM Serif Text"', 'serif'],
       },
       colors: {
         primary: {
