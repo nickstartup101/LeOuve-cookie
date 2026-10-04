@@ -6,10 +6,10 @@ import {
 import { db, auth, handleFirestoreError, OperationType } from '../firebase';
 import { useTranslation } from 'react-i18next';
 import { 
-  DollarSign, TrendingUp, TrendingDown, Wallet, CreditCard, 
-  Plus, Trash2, ArrowUpRight, ArrowDownRight,
-  Lock, Download, QrCode, Building2, Activity,
-  CheckCircle2, Sparkles, HandCoins, Receipt, Upload, Eye, Check
+  DollarSign, Wallet, CreditCard, 
+  Plus, Trash2,
+  Download, QrCode, Building2,
+  HandCoins, Receipt, Upload, Eye
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { utils, writeFile } from 'xlsx';
@@ -56,7 +56,7 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
   const [products, setProducts] = useState<any[]>([]);
   const [debts, setDebts] = useState<any[]>([]);
 
-  // Form State
+  // Form State: Transactions
   const [type, setType] = useState<'income' | 'expense'>('income');
   const [amount, setAmount] = useState<string>('');
   const [category, setCategory] = useState('ຂາຍເຄື່ອງດື່ມ & ກາເຟ (Coffee & Drinks)');
@@ -68,7 +68,7 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
   const [time, setTime] = useState(format(new Date(), 'HH:mm'));
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Debt Form State (AP / AR)
+  // Form State: Debts (AP / AR)
   const [debtType, setDebtType] = useState<'payable' | 'receivable'>('payable');
   const [debtPerson, setDebtPerson] = useState('');
   const [debtAmount, setDebtAmount] = useState('');
@@ -76,13 +76,13 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
   const [debtReceiptImage, setDebtReceiptImage] = useState('');
   const [debtRemark, setDebtRemark] = useState('');
 
-  // 📥 Drawer: ດຶງຈາກ Supplier ຕາມວັນທີ ພ້ອມ Checkbox ເລືອກຕິກ
+  // 📥 Drawer ດຶງໃບບິນ Supplier ຕາມວັນທີ
   const [isSupplierModalOpen, setIsSupplierModalOpen] = useState(false);
   const [selectedSupplierItems, setSelectedSupplierItems] = useState<{ [id: string]: boolean }>({});
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
-  // In-App Dialog / Delete Modal
-  const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; id: string; type: 'tx' | 'debt' }>({ isOpen: false, id: '', type: 'tx' });
+  // Custom In-App Modal Dialog
+  const [appDialog, setAppDialog] = useState<{ isOpen: boolean; title: string; message: string; onConfirm?: () => void }>({ isOpen: false, title: '', message: '' });
 
   useEffect(() => {
     const unsubTx = onSnapshot(query(collection(db, 'transactions'), orderBy('date', 'desc'), orderBy('time', 'desc')), snap => {
@@ -101,7 +101,7 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
     return () => { unsubTx(); unsubSp(); unsubPr(); unsubDebts(); };
   }, []);
 
-  // 📋 ຮອງຮັບ Paste ຮູບ (Ctrl+V) ທັງໃນ Transaction ແລະ Debt Form
+  // 📋 ຮອງຮັບ Paste ຮູບ (Ctrl+V) ທັງໃນລາຍຮັບ-ລາຍຈ່າຍ ແລະ ໜີ້ສິນ
   useEffect(() => {
     const handlePaste = async (e: ClipboardEvent) => {
       const items = e.clipboardData?.items;
@@ -121,7 +121,6 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
     return () => window.removeEventListener('paste', handlePaste);
   }, [subView]);
 
-  // Metrics
   const metrics = useMemo(() => {
     let totalIncome = 0;
     let totalExpense = 0;
@@ -201,7 +200,7 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
     setDebtRemark('');
   };
 
-  // 📥 ດຶງຫຼາຍລາຍການຈາກໃບບິນ Supplier ທີ່ເລືອກຕິກ ມາລົງລາຍຈ່າຍ COGS ພ້ອມກັນ
+  // 📥 ດຶງລາຍການຈາກໃບບິນ Supplier ທີ່ຕິກເລືອກ ມາລົງບັນຊີ COGS
   const handleConfirmImportSupplierItems = async () => {
     const selectedIds = Object.keys(selectedSupplierItems).filter(id => selectedSupplierItems[id]);
     if (selectedIds.length === 0) return;
@@ -245,7 +244,7 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
     <div className="space-y-6 font-sans pb-16">
       
       {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 bg-white dark:bg-[#141414] p-6 rounded-3xl border border-slate-200/80 dark:border-neutral-800 shadow-sm">
+      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 bg-white dark:bg-[#141414] p-6 rounded-3xl border border-slate-200/80 dark:border-neutral-800 shadow-xs">
         <div>
           <span className="bg-[#052659] dark:bg-white dark:text-neutral-950 text-white text-[9px] font-black px-2.5 py-1 rounded-full uppercase tracking-widest">
             Le Ouve Ledger & AP/AR
@@ -254,7 +253,7 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
             Financial Transactions & Debt Accounts
           </h1>
           <p className="text-xs text-slate-400 mt-0.5">
-            ບັນທຶກລາຍຮັບ-ລາຍຈ່າຍພ້ອມໃບບິນ, ດຶງໃບບິນຈາກ Supplier ຕາມວັນທີ, ແລະ ຄຸ້ມຄອງໜີ້ສິນ
+            {i18n.language === 'la' ? 'ບັນທຶກລາຍຮັບ-ລາຍຈ່າຍພ້ອມໃບບິນ, ດຶງໃບບິນ Supplier ຕາມວັນທີ, ແລະ ຄຸ້ມຄອງໜີ້ສິນ' : 'Record transactions with receipts, pull supplier invoices by date & manage AP/AR'}
           </p>
         </div>
 
@@ -263,7 +262,7 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
           className="crystal-button !py-2.5 !px-4 flex items-center gap-2 cursor-pointer"
         >
           <Receipt className="w-4 h-4" />
-          <span>ດຶງຈາກໃບບິນ Supplier</span>
+          <span>{i18n.language === 'la' ? 'ດຶງຈາກໃບບິນ Supplier' : 'Import Supplier Bill'}</span>
         </button>
       </div>
 
@@ -273,38 +272,38 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
           onClick={() => setSubView('transactions')}
           className={`px-4 py-2 rounded-2xl text-xs font-bold transition-all cursor-pointer ${subView === 'transactions' ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950' : 'bg-white dark:bg-[#141414] border border-slate-200 dark:border-neutral-800 text-slate-400'}`}
         >
-          ບັນຊີລາຍຮັບ-ລາຍຈ່າຍ
+          {i18n.language === 'la' ? 'ບັນຊີລາຍຮັບ-ລາຍຈ່າຍ' : 'Transactions'}
         </button>
         <button
           onClick={() => setSubView('debts')}
           className={`px-4 py-2 rounded-2xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${subView === 'debts' ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950' : 'bg-white dark:bg-[#141414] border border-slate-200 dark:border-neutral-800 text-slate-400'}`}
         >
           <HandCoins className="w-3.5 h-3.5" />
-          <span>ໜີ້ຕ້ອງສົ່ງ & ໜີ້ຕ້ອງຮັບ (AP / AR)</span>
+          <span>{i18n.language === 'la' ? 'ໜີ້ຕ້ອງສົ່ງ & ໜີ້ຕ້ອງຮັບ (AP / AR)' : 'AP & AR Debts'}</span>
         </button>
       </div>
 
       {subView === 'transactions' ? (
         <>
-          {/* ✨ CARDS ປົດຂອບສີອອກໝົດ: Minimalist Clean Border */}
+          {/* ✨ Cards: Clean Minimalist Borders (ບໍ່ມີຂອບສີແຖບໃຫຍ່) */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
-            <div className="high-density-card p-5">
+            <div className="high-density-card p-5 space-y-1">
               <span className="label-xs flex justify-between"><span>ລາຍຮັບລວມ</span><span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span></span>
               <h2 className="text-xl font-bold font-mono text-emerald-600 dark:text-emerald-400 mt-2">+{metrics.totalIncome.toLocaleString()} ₭</h2>
             </div>
-            <div className="high-density-card p-5">
+            <div className="high-density-card p-5 space-y-1">
               <span className="label-xs flex justify-between"><span>COGS ຕົ້ນທຶນວັດຖຸດິບ</span><span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span></span>
               <h2 className="text-xl font-bold font-mono text-amber-600 dark:text-amber-400 mt-2">-{metrics.cogsTotal.toLocaleString()} ₭</h2>
             </div>
-            <div className="high-density-card p-5">
+            <div className="high-density-card p-5 space-y-1">
               <span className="label-xs flex justify-between"><span>OPEX ດຳເນີນງານ</span><span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span></span>
               <h2 className="text-xl font-bold font-mono text-blue-600 dark:text-blue-400 mt-2">-{metrics.opexTotal.toLocaleString()} ₭</h2>
             </div>
-            <div className="high-density-card p-5">
+            <div className="high-density-card p-5 space-y-1">
               <span className="label-xs flex justify-between"><span>CAPEX & ອຸປະກອນ</span><span className="w-1.5 h-1.5 rounded-full bg-purple-500"></span></span>
               <h2 className="text-xl font-bold font-mono text-purple-600 dark:text-purple-400 mt-2">-{metrics.capexTotal.toLocaleString()} ₭</h2>
             </div>
-            <div className="high-density-card p-5">
+            <div className="high-density-card p-5 space-y-1">
               <span className="label-xs flex justify-between"><span>ປັນຜົນ (Dividend)</span><span className="w-1.5 h-1.5 rounded-full bg-pink-500"></span></span>
               <h2 className="text-xl font-bold font-mono text-pink-600 dark:text-pink-400 mt-2">-{metrics.dividendTotal.toLocaleString()} ₭</h2>
             </div>
@@ -318,8 +317,8 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
                 
                 <form onSubmit={handleAddTransaction} className="space-y-4">
                   <div className="grid grid-cols-2 gap-2 bg-slate-100 dark:bg-neutral-900 p-1 rounded-2xl">
-                    <button type="button" onClick={() => setType('income')} className={`py-2 text-xs font-bold rounded-xl ${type === 'income' ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950' : 'text-slate-400'}`}>+ ລາຍຮັບ</button>
-                    <button type="button" onClick={() => setType('expense')} className={`py-2 text-xs font-bold rounded-xl ${type === 'expense' ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950' : 'text-slate-400'}`}>- ລາຍຈ່າຍ</button>
+                    <button type="button" onClick={() => setType('income')} className={`py-2 text-xs font-bold rounded-xl cursor-pointer ${type === 'income' ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950' : 'text-slate-400'}`}>+ ລາຍຮັບ</button>
+                    <button type="button" onClick={() => setType('expense')} className={`py-2 text-xs font-bold rounded-xl cursor-pointer ${type === 'expense' ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950' : 'text-slate-400'}`}>- ລາຍຈ່າຍ</button>
                   </div>
 
                   <div>
@@ -337,7 +336,7 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
                           { id: 'capex', name: 'CAPEX ອຸປະກອນ' },
                           { id: 'dividend', name: 'ປັນຜົນ' }
                         ].map(b => (
-                          <button key={b.id} type="button" onClick={() => setExpenseBucket(b.id as any)} className={`p-2 rounded-xl text-xs font-bold border text-left ${expenseBucket === b.id ? 'border-[#052659] dark:border-white bg-[#052659]/5 dark:bg-white/5 font-black' : 'border-slate-200 dark:border-neutral-800 text-slate-400'}`}>
+                          <button key={b.id} type="button" onClick={() => setExpenseBucket(b.id as any)} className={`p-2 rounded-xl text-xs font-bold border text-left cursor-pointer ${expenseBucket === b.id ? 'border-[#052659] dark:border-white bg-[#052659]/5 dark:bg-white/5 font-black' : 'border-slate-200 dark:border-neutral-800 text-slate-400'}`}>
                             {b.name}
                           </button>
                         ))}
@@ -349,26 +348,27 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
                     <label className="label-xs block mb-1">ຊ່ອງທາງຊຳລະ</label>
                     <div className="grid grid-cols-3 gap-1.5">
                       {['cash', 'onepay', 'ldb'].map(s => (
-                        <button key={s} type="button" onClick={() => setSource(s as any)} className={`py-2 text-xs font-bold rounded-xl border uppercase ${source === s ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950 border-transparent' : 'border-slate-200 dark:border-neutral-800 text-slate-500'}`}>
+                        <button key={s} type="button" onClick={() => setSource(s as any)} className={`py-2 text-xs font-bold rounded-xl border uppercase cursor-pointer ${source === s ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950 border-transparent' : 'border-slate-200 dark:border-neutral-800 text-slate-500'}`}>
                           {s}
                         </button>
                       ))}
                     </div>
                   </div>
 
-                  {/* 📸 Image Upload / Paste for Transactions */}
+                  {/* 📸 ປັບປຸງຊ່ອງອັບໂຫຼດຮູບໃບບິນ: ມີ Preview, Drag & Drop, Ctrl+V */}
                   <div>
                     <label className="label-xs flex justify-between mb-1">
-                      <span>ຮູບໃບບິນ (Ctrl+V ວາງໄດ້)</span>
+                      <span>ຮູບໃບບິນ (Receipt Attachment)</span>
+                      <span className="text-emerald-500 font-bold text-[9px]">Ctrl+V ວາງໄດ້</span>
                     </label>
-                    <div className="border border-dashed border-slate-300 dark:border-neutral-700 rounded-xl p-2 relative flex items-center justify-between">
+                    <div className="border border-dashed border-slate-200 dark:border-neutral-700 rounded-xl p-2.5 relative flex items-center justify-between hover:bg-slate-50 dark:hover:bg-neutral-800/40 transition-colors">
                       <input type="file" accept="image/*" onChange={async (e) => {
                         const file = e.target.files?.[0];
                         if (file) setReceiptImage(await compressImage(file));
                       }} className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" />
                       {receiptImage ? (
                         <div className="flex items-center gap-2 w-full justify-between">
-                          <img src={receiptImage} alt="Receipt" className="w-8 h-8 rounded-lg object-cover" />
+                          <img src={receiptImage} alt="Receipt" className="w-8 h-8 rounded-lg object-cover border border-neutral-700" />
                           <span className="text-[10px] text-emerald-500 font-bold">ອັບໂຫຼດຮູບແລ້ວ ✓</span>
                           <button type="button" onClick={(e) => { e.stopPropagation(); setReceiptImage(''); }} className="text-rose-500 p-1">✕</button>
                         </div>
@@ -426,7 +426,7 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
                             ) : <span className="text-slate-500">-</span>}
                           </td>
                           <td className="p-3 text-center">
-                            <button onClick={() => setDeleteModal({ isOpen: true, id: t.id, type: 'tx' })} className="text-slate-400 hover:text-rose-500 cursor-pointer">
+                            <button onClick={() => setAppDialog({ isOpen: true, title: 'ຢືນຢັນການລຶບ', message: 'ທ່ານແນ່ໃຈບໍ່ວ່າຕ້ອງການລຶບທຸລະກຳນີ້?', onConfirm: async () => await deleteDoc(doc(db, 'transactions', t.id)) })} className="text-slate-400 hover:text-rose-500 cursor-pointer">
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           </td>
@@ -440,16 +440,16 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
           </div>
         </>
       ) : (
-        /* 📑 ໜີ້ສິນ (AP/AR) + ອັບໂຫຼດຮູບໃບບິນ */
+        /* 📑 ໜີ້ສິນ (AP/AR) + ອັບໂຫຼດຮູບຫຼັກຖານໜີ້ */
         <div className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="high-density-card p-6">
               <span className="label-xs text-rose-500">ໜີ້ຕ້ອງສົ່ງທັງໝົດ (AP - ຕິດໜີ້ເພິ່ນ)</span>
-              <h2 className="text-2xl font-bold font-mono text-rose-600 dark:text-rose-400 mt-2">{debtMetrics.totalPayable.toLocaleString()} ₭</h2>
+              <h2 className="text-2xl font-serif font-bold text-rose-600 dark:text-rose-400 mt-2">{debtMetrics.totalPayable.toLocaleString()} ₭</h2>
             </div>
             <div className="high-density-card p-6">
               <span className="label-xs text-emerald-500">ໜີ້ຕ້ອງຮັບທັງໝົດ (AR - ລູກຄ້າຕິດໜີ້)</span>
-              <h2 className="text-2xl font-bold font-mono text-emerald-600 dark:text-emerald-400 mt-2">{debtMetrics.totalReceivable.toLocaleString()} ₭</h2>
+              <h2 className="text-2xl font-serif font-bold text-emerald-600 dark:text-emerald-400 mt-2">{debtMetrics.totalReceivable.toLocaleString()} ₭</h2>
             </div>
           </div>
 
@@ -459,8 +459,8 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
                 <h3 className="text-sm font-serif text-slate-800 dark:text-white">ບັນທຶກໜີ້ສິນ (AP/AR)</h3>
                 <form onSubmit={handleAddDebt} className="space-y-3">
                   <div className="grid grid-cols-2 gap-1.5 bg-slate-100 dark:bg-neutral-900 p-1 rounded-2xl">
-                    <button type="button" onClick={() => setDebtType('payable')} className={`py-2 text-xs font-bold rounded-xl ${debtType === 'payable' ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950' : 'text-slate-400'}`}>ໜີ້ຕ້ອງສົ່ງ (AP)</button>
-                    <button type="button" onClick={() => setDebtType('receivable')} className={`py-2 text-xs font-bold rounded-xl ${debtType === 'receivable' ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950' : 'text-slate-400'}`}>ໜີ້ຕ້ອງຮັບ (AR)</button>
+                    <button type="button" onClick={() => setDebtType('payable')} className={`py-2 text-xs font-bold rounded-xl cursor-pointer ${debtType === 'payable' ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950' : 'text-slate-400'}`}>ໜີ້ຕ້ອງສົ່ງ (AP)</button>
+                    <button type="button" onClick={() => setDebtType('receivable')} className={`py-2 text-xs font-bold rounded-xl cursor-pointer ${debtType === 'receivable' ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950' : 'text-slate-400'}`}>ໜີ້ຕ້ອງຮັບ (AR)</button>
                   </div>
 
                   <div>
@@ -480,8 +480,10 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
 
                   {/* 📸 Debt Receipt Upload */}
                   <div>
-                    <label className="label-xs flex justify-between mb-1"><span>ຮູບຫຼັກຖານໜີ້ສິນ (Ctrl+V)</span></label>
-                    <div className="border border-dashed border-slate-300 dark:border-neutral-700 rounded-xl p-2 relative flex items-center justify-between">
+                    <label className="label-xs flex justify-between mb-1">
+                      <span>ຮູບຫຼັກຖານໜີ້ສິນ (Ctrl+V)</span>
+                    </label>
+                    <div className="border border-dashed border-slate-200 dark:border-neutral-700 rounded-xl p-2 relative flex items-center justify-between">
                       <input type="file" accept="image/*" onChange={async (e) => {
                         const file = e.target.files?.[0];
                         if (file) setDebtReceiptImage(await compressImage(file));
@@ -529,7 +531,9 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
                           </td>
                           <td className="p-3 font-bold text-slate-800 dark:text-white">{d.person}</td>
                           <td className="p-3 font-mono text-slate-400">{d.dueDate}</td>
-                          <td className="p-3 text-right font-mono font-bold">{Number(d.amount).toLocaleString()} ₭</td>
+                          <td className="p-3 text-right font-mono font-bold">
+                            {Number(d.amount).toLocaleString()} ₭
+                          </td>
                           <td className="p-3 text-center">
                             {d.receiptImage ? (
                               <button onClick={() => setPreviewImage(d.receiptImage)} className="p-1 rounded bg-emerald-500/10 text-emerald-500">
@@ -546,7 +550,7 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
                             </button>
                           </td>
                           <td className="p-3 text-center">
-                            <button onClick={() => setDeleteModal({ isOpen: true, id: d.id, type: 'debt' })} className="text-slate-400 hover:text-rose-500 cursor-pointer">
+                            <button onClick={() => setAppDialog({ isOpen: true, title: 'ຢືນຢັນການລຶບ', message: 'ທ່ານແນ່ໃຈບໍ່ວ່າຕ້ອງການລຶບລາຍການໜີ້ສິນນີ້?', onConfirm: async () => await deleteDoc(doc(db, 'debts', d.id)) })} className="text-slate-400 hover:text-rose-500 cursor-pointer">
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           </td>
@@ -561,13 +565,13 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
         </div>
       )}
 
-      {/* 📥 MODAL ດຶງໃບບິນຈາກ SUPPLIER: ແຍກຕາມວັນທີ & ເລືອກຕິກລາຍການໄດ້! */}
+      {/* 📥 MODAL ດຶງໃບບິນ SUPPLIER ຕາມວັນທີ & ເລືອກຕິກໄດ້ */}
       {isSupplierModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setIsSupplierModalOpen(false)}>
           <div className="bg-white dark:bg-[#141414] rounded-3xl p-6 border border-slate-200 dark:border-neutral-800 max-w-2xl w-full space-y-4 max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center border-b border-slate-100 dark:border-neutral-800 pb-3">
               <div>
-                <h3 className="text-sm font-serif text-slate-800 dark:text-white">ດຶງລາຍການຈາກໃບບິນ Supplier ມາລົງລາຍຈ່າຍ (COGS)</h3>
+                <h3 className="text-sm font-serif text-slate-800 dark:text-white">ດຶງລາຍການຈາກໃບບິນ Supplier ມາລົງບັນຊີ (COGS)</h3>
                 <p className="text-[10px] text-slate-400 mt-0.5">ເລືອກຕິກເອົາສະເພາະລາຍການທີ່ຕ້ອງການດຶງເຂົ້າບັນຊີ</p>
               </div>
               <button onClick={() => setIsSupplierModalOpen(false)} className="text-slate-400 hover:text-white">✕</button>
@@ -626,7 +630,7 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
         </div>
       )}
 
-      {/* Modal ເບິ່ງຮູບເຕັມ */}
+      {/* Modal Preview Image */}
       {previewImage && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm" onClick={() => setPreviewImage(null)}>
           <div className="relative max-w-xl max-h-[85vh] bg-[#141414] rounded-3xl p-3 border border-neutral-800" onClick={e => e.stopPropagation()}>
@@ -636,23 +640,22 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
         </div>
       )}
 
-      {/* 💬 In-App Delete Confirm Dialog */}
-      {deleteModal.isOpen && (
+      {/* 💬 In-App Dialog Modal (ບໍ່ໃຊ້ alert/confirm browser) */}
+      {appDialog.isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
           <div className="bg-white dark:bg-[#141414] rounded-3xl p-6 border border-slate-200 dark:border-neutral-800 max-w-sm w-full space-y-4">
-            <h3 className="text-sm font-serif text-slate-800 dark:text-white">ຢືນຢັນການລຶບ</h3>
-            <p className="text-xs text-slate-400">ທ່ານແນ່ໃຈບໍ່ວ່າຕ້ອງການລຶບລາຍການນີ້ອອກຈາກລະບົບ?</p>
+            <h3 className="text-sm font-serif text-slate-800 dark:text-white">{appDialog.title}</h3>
+            <p className="text-xs text-slate-400">{appDialog.message}</p>
             <div className="flex gap-2 pt-2">
-              <button onClick={() => setDeleteModal({ isOpen: false, id: '', type: 'tx' })} className="flex-1 py-2.5 rounded-xl border text-xs font-bold text-slate-400">ຍົກເລີກ</button>
+              <button onClick={() => setAppDialog({ isOpen: false, title: '', message: '' })} className="flex-1 py-2.5 rounded-xl border text-xs font-bold text-slate-400">ຍົກເລີກ</button>
               <button 
-                onClick={async () => {
-                  if (deleteModal.type === 'tx') await deleteDoc(doc(db, 'transactions', deleteModal.id));
-                  else await deleteDoc(doc(db, 'debts', deleteModal.id));
-                  setDeleteModal({ isOpen: false, id: '', type: 'tx' });
+                onClick={() => {
+                  appDialog.onConfirm?.();
+                  setAppDialog({ isOpen: false, title: '', message: '' });
                 }} 
                 className="flex-1 py-2.5 rounded-xl bg-rose-600 text-white text-xs font-bold"
               >
-                ລຶບທັນທີ
+                ຢືນຢັນ
               </button>
             </div>
           </div>
