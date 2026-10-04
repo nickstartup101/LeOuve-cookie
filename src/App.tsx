@@ -8,7 +8,9 @@ import {
   Settings as SettingsIcon,
   LogOut,
   Moon,
-  Sun
+  Sun,
+  Menu,
+  X
 } from 'lucide-react';
 import { auth, googleProvider, db } from './firebase';
 import { signInWithPopup, signOut, onAuthStateChanged, User } from 'firebase/auth';
@@ -28,6 +30,7 @@ export default function App() {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [userSettings, setUserSettings] = useState<any>(null);
   const [appConfig, setAppConfig] = useState<any>(null);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (currentUser) => {
@@ -45,7 +48,6 @@ export default function App() {
     const unsubAppConfig = onSnapshot(doc(db, 'settings', 'appConfig'), (snap) => {
       if (snap.exists()) setAppConfig(snap.data());
     });
-
     return () => { unsubUserSettings(); unsubAppConfig(); };
   }, [user]);
 
@@ -66,13 +68,10 @@ export default function App() {
     );
   }
 
-  // ✨ ໜ້າ Login ແບບ Editorial Minimalism (ບໍ່ມີໄອຄອນ LO)
   if (!user) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-100 dark:bg-[#0a0a0a] p-6">
+      <div className="min-h-screen flex items-center justify-center bg-slate-100 dark:bg-[#0a0a0a] p-6 font-sans">
         <div className="w-full max-w-md bg-white dark:bg-[#141414] rounded-[2.5rem] p-12 shadow-2xl border border-slate-200/80 dark:border-neutral-800 text-center space-y-8 animate-in fade-in zoom-in-95 duration-300">
-          
-          {/* Brand Wordmark ໃຫຍ່ໆເດັ່ນໆ */}
           <div className="flex flex-col items-center justify-center select-none pt-2">
             <h1 className="font-serif text-5xl md:text-6xl text-neutral-900 dark:text-white tracking-tight leading-none">
               Le Ouve
@@ -85,12 +84,12 @@ export default function App() {
           <div className="w-12 h-[1px] bg-neutral-200 dark:bg-neutral-800 mx-auto"></div>
 
           <p className="font-sans text-xs font-light text-slate-500 dark:text-neutral-400 leading-relaxed max-w-xs mx-auto">
-            ລະບົບຄຸ້ມຄອງຄັງສາງ, ຕົ້ນທຶນສູດເຄື່ອງດື່ມ, ບັນຊີການເງິນ ແລະ ໃບບິນຈັດຊື້ອັດຕະໂນມັດ
+            ລະບົບຄຸ້ມຄອງຄັງສາງ, ຕົ້ນທຶນສູດ, ບັນຊີການເງິນ & ບິນຈັດຊື້ອັດຕະໂນມັດ
           </p>
 
           <button
             onClick={() => signInWithPopup(auth, googleProvider)}
-            className="w-full py-4 bg-[#052659] hover:bg-[#0c3a80] dark:bg-white dark:hover:bg-neutral-200 dark:text-neutral-950 text-white rounded-2xl font-sans font-medium text-xs uppercase tracking-[0.2em] shadow-xl transition-all active:scale-95 cursor-pointer"
+            className="w-full py-4 bg-[#052659] hover:bg-[#0c3a80] text-white rounded-2xl font-sans font-medium text-xs uppercase tracking-[0.2em] shadow-xl transition-all active:scale-95 cursor-pointer"
           >
             Sign in with Google
           </button>
@@ -99,113 +98,150 @@ export default function App() {
     );
   }
 
+  const navItems = [
+    { key: 'dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+    { key: 'finance', icon: DollarSign, label: 'Finance & Debts' },
+    { key: 'inventory', icon: Layers, label: 'Inventory & Recipe' },
+    { key: 'suppliers', icon: Truck, label: 'Suppliers & Quotes' },
+    { key: 'planner', icon: ShoppingCart, label: 'Procurement Bill' },
+    { key: 'settings', icon: SettingsIcon, label: 'Settings' }
+  ];
+
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-[#0a0a0a] text-slate-800 dark:text-neutral-100 transition-colors duration-200">
+    <div className="min-h-screen flex bg-slate-50 dark:bg-[#0a0a0a] text-slate-800 dark:text-neutral-100 font-sans transition-colors duration-200">
       
-      {/* 🧭 Top Navigation Bar */}
-      <header className="sticky top-0 z-40 bg-white/90 dark:bg-[#0a0a0a]/90 backdrop-blur-md border-b border-slate-200/80 dark:border-neutral-800 px-6 py-3.5 flex items-center justify-between">
+      {/* 🧭 SIDEBAR ສີຟ້າເຂັ້ມ `#052659` (Desktop Permanent Sidebar) */}
+      <aside className="hidden lg:flex w-64 bg-[#052659] text-white flex-col justify-between fixed inset-y-0 left-0 z-40 border-r border-[#0c3a80]/40 shadow-2xl select-none">
         
-        {/* ✨ Brand Header (ເອົາສັນຍາລັກ LO ອອກ ➔ ໃສ່ Le Ouve ໃຫຍ່ໆ + workspace estd 2026 ບາງນ້ອຍ) */}
-        <div 
-          className="flex flex-col cursor-pointer select-none group pr-4" 
-          onClick={() => setActiveTab('dashboard')}
-        >
-          <h1 className="font-serif text-2xl md:text-3xl text-neutral-900 dark:text-white tracking-tight leading-none group-hover:opacity-85 transition-opacity">
-            {appConfig?.shopName || 'Le Ouve'}
-          </h1>
-          <span className="font-sans text-[8px] md:text-[8.5px] font-light tracking-[0.35em] uppercase text-neutral-400 dark:text-neutral-500 mt-1 leading-none">
-            workspace estd 2026
-          </span>
+        {/* Brand Header */}
+        <div className="p-7 border-b border-white/10">
+          <div className="cursor-pointer" onClick={() => setActiveTab('dashboard')}>
+            <h1 className="font-serif text-3xl text-white tracking-tight leading-none">
+              {appConfig?.shopName || 'Le Ouve'}
+            </h1>
+            <p className="font-sans text-[8px] font-light tracking-[0.35em] uppercase text-white/50 mt-1.5 leading-none">
+              workspace estd 2026
+            </p>
+          </div>
         </div>
 
-        {/* Desktop Navbar Tabs */}
-        <nav className="hidden lg:flex items-center gap-1 bg-slate-100 dark:bg-neutral-900 p-1.5 rounded-2xl border border-slate-200/60 dark:border-neutral-800">
-          {[
-            { key: 'dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-            { key: 'finance', icon: DollarSign, label: 'Finance' },
-            { key: 'inventory', icon: Layers, label: 'Inventory & Recipe' },
-            { key: 'suppliers', icon: Truck, label: 'Suppliers' },
-            { key: 'planner', icon: ShoppingCart, label: 'Procurement Bill' },
-            { key: 'settings', icon: SettingsIcon, label: 'Settings' }
-          ].map(tab => (
-            <button
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key as any)}
-              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs uppercase tracking-wider transition-all cursor-pointer font-sans ${
-                activeTab === tab.key 
-                  ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950 font-medium shadow-sm' 
-                  : 'text-slate-500 hover:text-slate-900 dark:hover:text-white font-light'
-              }`}
-            >
-              <tab.icon className="w-3.5 h-3.5" />
-              <span>{tab.label}</span>
-            </button>
-          ))}
+        {/* Navigation Links */}
+        <nav className="p-4 space-y-1.5 flex-1 overflow-y-auto">
+          {navItems.map(item => {
+            const isActive = activeTab === item.key;
+            return (
+              <button
+                key={item.key}
+                onClick={() => setActiveTab(item.key as any)}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs uppercase tracking-wider transition-all cursor-pointer font-sans ${
+                  isActive 
+                    ? 'bg-white text-[#052659] font-bold shadow-lg shadow-black/20 translate-x-1' 
+                    : 'text-white/70 hover:text-white hover:bg-white/10 font-light'
+                }`}
+              >
+                <item.icon className="w-4 h-4 shrink-0" />
+                <span className="truncate">{item.label}</span>
+              </button>
+            );
+          })}
         </nav>
 
-        {/* Right Tools (Dark Mode, Logout) */}
-        <div className="flex items-center gap-2.5">
-          <button
-            onClick={() => setIsDarkMode(!isDarkMode)}
-            className="p-2 rounded-xl bg-slate-100 dark:bg-neutral-900 text-slate-600 dark:text-neutral-300 hover:bg-slate-200 dark:hover:bg-neutral-800 transition-colors cursor-pointer"
-            title="Toggle Night Mode"
-          >
-            {isDarkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4" />}
-          </button>
+        {/* Sidebar Footer Tools */}
+        <div className="p-4 border-t border-white/10 space-y-3">
+          <div className="flex items-center justify-between px-2">
+            <span className="text-[10px] uppercase tracking-wider text-white/40 font-light">Appearance</span>
+            <button
+              onClick={() => setIsDarkMode(!isDarkMode)}
+              className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
+              title="Toggle Night Mode"
+            >
+              {isDarkMode ? <Sun className="w-3.5 h-3.5 text-amber-300" /> : <Moon className="w-3.5 h-3.5" />}
+            </button>
+          </div>
 
-          <button
-            onClick={() => signOut(auth)}
-            className="p-2 rounded-xl bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 transition-colors cursor-pointer"
-            title="Sign Out"
-          >
-            <LogOut className="w-4 h-4" />
+          <div className="flex items-center justify-between p-2 rounded-2xl bg-black/20 border border-white/5">
+            <div className="truncate pr-2">
+              <p className="text-xs font-bold text-white truncate leading-none">{user.displayName || 'Admin'}</p>
+              <p className="text-[9px] text-white/40 truncate mt-1 font-light">{user.email}</p>
+            </div>
+            <button
+              onClick={() => signOut(auth)}
+              className="p-2 text-rose-400 hover:bg-rose-500/20 rounded-xl transition-colors cursor-pointer"
+              title="Sign Out"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      </aside>
+
+      {/* 📱 Mobile Top Navigation Header */}
+      <div className="lg:hidden fixed top-0 inset-x-0 z-40 bg-[#052659] text-white px-5 py-3.5 flex items-center justify-between shadow-md">
+        <div>
+          <h1 className="font-serif text-2xl text-white tracking-tight leading-none">Le Ouve</h1>
+          <p className="text-[7.5px] font-light tracking-[0.3em] uppercase text-white/50 mt-1">workspace estd 2026</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2 rounded-xl bg-white/10 text-white">
+            {isDarkMode ? <Sun className="w-3.5 h-3.5 text-amber-300" /> : <Moon className="w-3.5 h-3.5" />}
+          </button>
+          <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="p-2 rounded-xl bg-white/10 text-white">
+            {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
         </div>
-      </header>
-
-      {/* 📱 Mobile Floating Bottom Bar */}
-      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-[#0a0a0a]/95 backdrop-blur-md border-t border-slate-200 dark:border-neutral-800 px-2 py-2 flex justify-around items-center">
-        {[
-          { key: 'dashboard', icon: LayoutDashboard, label: 'Dash' },
-          { key: 'finance', icon: DollarSign, label: 'Finance' },
-          { key: 'inventory', icon: Layers, label: 'Stock' },
-          { key: 'suppliers', icon: Truck, label: 'Suppliers' },
-          { key: 'planner', icon: ShoppingCart, label: 'Bills' },
-          { key: 'settings', icon: SettingsIcon, label: 'Setup' }
-        ].map(tab => (
-          <button
-            key={tab.key}
-            onClick={() => setActiveTab(tab.key as any)}
-            className={`flex flex-col items-center gap-1 text-[9px] font-sans uppercase py-1 px-2 rounded-xl cursor-pointer ${
-              activeTab === tab.key 
-                ? 'text-[#052659] dark:text-white font-semibold scale-105' 
-                : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 font-light'
-            }`}
-          >
-            <tab.icon className="w-4 h-4" />
-            <span>{tab.label}</span>
-          </button>
-        ))}
       </div>
 
-      {/* 💻 Main Workspace Content */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 mb-16 lg:mb-0">
-        {activeTab === 'dashboard' && <Dashboard userSettings={userSettings} user={user} />}
-        {activeTab === 'finance' && <Finance userSettings={userSettings} />}
-        {activeTab === 'inventory' && <Inventory />}
-        {activeTab === 'suppliers' && <Suppliers />}
-        {activeTab === 'planner' && <ProcurementPlanner />}
-        {activeTab === 'settings' && (
-          <Settings 
-            user={user} 
-            isDarkMode={isDarkMode} 
-            setIsDarkMode={setIsDarkMode} 
-            userSettings={userSettings} 
-            isSuperAdmin={true} 
-            appConfig={appConfig} 
-          />
-        )}
+      {/* Mobile Drawer Menu */}
+      {isMobileMenuOpen && (
+        <div className="lg:hidden fixed inset-0 z-50 bg-black/70 backdrop-blur-sm" onClick={() => setIsMobileMenuOpen(false)}>
+          <div className="w-72 bg-[#052659] h-full p-6 text-white flex flex-col justify-between" onClick={e => e.stopPropagation()}>
+            <div className="space-y-6">
+              <div className="border-b border-white/10 pb-4">
+                <h2 className="font-serif text-3xl">Le Ouve</h2>
+                <p className="text-[8px] uppercase tracking-[0.35em] text-white/50 mt-1">workspace estd 2026</p>
+              </div>
+              <div className="space-y-1">
+                {navItems.map(item => (
+                  <button
+                    key={item.key}
+                    onClick={() => { setActiveTab(item.key as any); setIsMobileMenuOpen(false); }}
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs uppercase tracking-wider ${activeTab === item.key ? 'bg-white text-[#052659] font-bold' : 'text-white/70'}`}
+                  >
+                    <item.icon className="w-4 h-4" />
+                    <span>{item.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <button onClick={() => signOut(auth)} className="w-full py-3 rounded-xl bg-rose-500/20 text-rose-300 text-xs font-bold uppercase flex items-center justify-center gap-2">
+              <LogOut className="w-4 h-4" />
+              <span>Log Out</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 💻 Content Layout (Pl-64 ໃຫ້ພໍດີກັບ Sidebar) */}
+      <main className="flex-1 lg:pl-64 w-full min-w-0 pt-16 lg:pt-0">
+        <div className="max-w-7xl mx-auto p-5 md:p-8">
+          {activeTab === 'dashboard' && <Dashboard userSettings={userSettings} user={user} />}
+          {activeTab === 'finance' && <Finance userSettings={userSettings} />}
+          {activeTab === 'inventory' && <Inventory />}
+          {activeTab === 'suppliers' && <Suppliers />}
+          {activeTab === 'planner' && <ProcurementPlanner />}
+          {activeTab === 'settings' && (
+            <Settings 
+              user={user} 
+              isDarkMode={isDarkMode} 
+              setIsDarkMode={setIsDarkMode} 
+              userSettings={userSettings} 
+              isSuperAdmin={true} 
+              appConfig={appConfig} 
+            />
+          )}
+        </div>
       </main>
+
     </div>
   );
 }
