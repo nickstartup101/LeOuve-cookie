@@ -6,7 +6,7 @@ import {
 } from 'firebase/firestore';
 import { 
   Plus, Trash2, Save, X, Search, 
-  Receipt, Upload, Eye, Calculator, CheckCircle2
+  Receipt, Upload, Eye, Calculator, Package, Wrench, Sparkles, Image as ImageIcon
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useTranslation } from 'react-i18next';
@@ -60,15 +60,15 @@ export default function Suppliers() {
   const [supplierList, setSupplierList] = useState<string[]>(['ລັກຂະນາແພກ', 'LATDA', 'CHANHOM', 'DMART', 'HEAVENLY']);
   const [filter, setFilter] = useState('');
 
-  // 1. ຫົວໃບບິນ: ຮ້ານຄ້າ, ວັນທີ, ສະກຸນເງິນ (THB/LAK/USD), ເລດແລກປ່ຽນ, ຮູບໃບບິນ
+  // Invoice Header State
   const [billSupplier, setBillSupplier] = useState('ລັກຂະນາແພກ');
   const [billCurrency, setBillCurrency] = useState<'THB' | 'LAK' | 'USD'>('THB');
-  const [billExchangeRate, setBillExchangeRate] = useState<number>(680); // ເລດເງິນບາດ
+  const [billExchangeRate, setBillExchangeRate] = useState<number>(680);
   const [billDate, setBillDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [billTime, setBillTime] = useState(format(new Date(), 'HH:mm'));
   const [billReceiptImage, setBillReceiptImage] = useState('');
   
-  // 2. ລາຍການເຄື່ອງໃນບິນ (Multi-items)
+  // Batch Items List
   const [billItems, setBillItems] = useState<BillItemRow[]>([
     { productId: '', name: '', quantity: 1, quantityPerUnit: 1000, unit: 'g', priceOriginal: '', priceMode: 'total', remark: '' }
   ]);
@@ -76,14 +76,23 @@ export default function Suppliers() {
   const [saveLoading, setSaveLoading] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
-  // In-App Popups
+  // 📦 New Product Modal State (ຊື່ສິນຄ້າ, ປະເພດ COGS/ອຸປະກອນ/ດຳເນີນງານ, ຮູບສິນຄ້າ)
+  const [isAddProductModalOpen, setIsAddProductModalOpen] = useState(false);
+  const [newProductForm, setNewProductForm] = useState({
+    name: '',
+    categoryType: 'COGS' as 'COGS' | 'EQUIPMENT' | 'OPERATIONAL',
+    unit: 'g',
+    packSize: 1000,
+    minStock: 100,
+    productImage: ''
+  });
+
   const [appModal, setAppModal] = useState<{
     isOpen: boolean;
     title: string;
-    type: 'add_supplier' | 'add_product' | 'delete_quote' | 'alert';
+    type: 'add_supplier' | 'delete_quote' | 'alert';
     data?: any;
     inputValue?: string;
-    unitValue?: string;
   }>({ isOpen: false, title: '', type: 'alert' });
 
   useEffect(() => {
@@ -99,7 +108,7 @@ export default function Suppliers() {
     return () => { unsubP(); unsubS(); };
   }, []);
 
-  // Ctrl+V Paste Receipt
+  // 📋 ຮອງຮັບ Paste ຮູບ (Ctrl+V) ທັງໃນໃບບິນ ແລະ ໃນຟອມເພີ່ມສິນຄ້າ
   useEffect(() => {
     const handlePaste = async (e: ClipboardEvent) => {
       const items = e.clipboardData?.items;
@@ -109,28 +118,24 @@ export default function Suppliers() {
           const file = items[i].getAsFile();
           if (file) {
             const base64 = await compressImage(file);
-            setBillReceiptImage(base64);
+            if (isAddProductModalOpen) {
+              setNewProductForm(prev => ({ ...prev, productImage: base64 }));
+            } else {
+              setBillReceiptImage(base64);
+            }
           }
         }
       }
     };
     window.addEventListener('paste', handlePaste);
     return () => window.removeEventListener('paste', handlePaste);
-  }, []);
+  }, [isAddProductModalOpen]);
 
   const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     const files = e.dataTransfer.files;
     if (files.length > 0 && files[0].type.startsWith('image/')) {
       const base64 = await compressImage(files[0]);
-      setBillReceiptImage(base64);
-    }
-  };
-
-  const handleImageFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const base64 = await compressImage(file);
       setBillReceiptImage(base64);
     }
   };
@@ -147,35 +152,63 @@ export default function Suppliers() {
     setBillItems(prev => prev.filter((_, i) => i !== idx));
   };
 
-  // 💡 ຄິດໄລ່ຍອດລວມທັງໝົດຂອງໃບບິນ (Grand Total Live Check)
   const billSummary = useMemo(() => {
     let grandTotalOriginal = 0;
-
     billItems.forEach(it => {
       const rawPrice = Number(String(it.priceOriginal).replace(/,/g, '')) || 0;
       const qty = Number(it.quantity) || 1;
-      const totalForItem = it.priceMode === 'total' ? rawPrice : rawPrice * qty;
-      grandTotalOriginal += totalForItem;
+      grandTotalOriginal += (it.priceMode === 'total' ? rawPrice : rawPrice * qty);
     });
 
     const rate = billCurrency === 'LAK' ? 1 : (Number(billExchangeRate) || 1);
-    const grandTotalLAK = grandTotalOriginal * rate;
-
     return {
       grandTotalOriginal,
-      grandTotalLAK,
-      itemCount: billItems.filter(it => it.productId).length
+      grandTotalLAK: grandTotalOriginal * rate
     };
   }, [billItems, billCurrency, billExchangeRate]);
 
-  // 🚀 ບັນທຶກທຸກລາຍການໃນໃບບິນ
+  // 🚀 ບັນທຶກສິນຄ້າໃໝ່ (Product) ພ້ອມໝວດໝູ່ COGS/ອຸປະກອນ/ດຳເນີນງານ ແລະ ຮູບສິນຄ້າ
+  const handleSaveNewProduct = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newProductForm.name.trim()) return;
+
+    try {
+      const docRef = await addDoc(collection(db, 'products'), {
+        name: newProductForm.name.trim(),
+        categoryType: newProductForm.categoryType, // 'COGS' | 'EQUIPMENT' | 'OPERATIONAL'
+        unit: newProductForm.unit || 'g',
+        packSize: Number(newProductForm.packSize) || 1000,
+        minStock: Number(newProductForm.minStock) || 100,
+        productImage: newProductForm.productImage || '',
+        isDurable: newProductForm.categoryType === 'EQUIPMENT',
+        createdAt: serverTimestamp()
+      });
+
+      // Auto select the new product in the first item row
+      setBillItems(prev => prev.map((it, idx) => idx === 0 ? {
+        ...it,
+        productId: docRef.id,
+        unit: newProductForm.unit,
+        quantityPerUnit: newProductForm.packSize
+      } : it));
+
+      setIsAddProductModalOpen(false);
+      setNewProductForm({
+        name: '',
+        categoryType: 'COGS',
+        unit: 'g',
+        packSize: 1000,
+        minStock: 100,
+        productImage: ''
+      });
+      alert("ເພີ່ມສິນຄ້າໃໝ່ສຳເລັດແລ້ວ!");
+    } catch (e: any) {
+      alert("Error: " + e.message);
+    }
+  };
+
   const handleSaveWholeBill = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!billSupplier) {
-      setAppModal({ isOpen: true, title: 'ແຈ້ງເຕືອນ', type: 'alert', data: 'ກະລຸນາເລືອກຮ້ານຄ້າ' });
-      return;
-    }
-
     const validItems = billItems.filter(it => it.productId && Number(String(it.priceOriginal).replace(/,/g, '')) > 0);
     if (validItems.length === 0) {
       setAppModal({ isOpen: true, title: 'ແຈ້ງເຕືອນ', type: 'alert', data: 'ກະລຸນາເລືອກສິນຄ້າ ແລະ ໃສ່ລາຄາຢ່າງໜ້ອຍ 1 ລາຍການ' });
@@ -227,7 +260,7 @@ export default function Suppliers() {
         isOpen: true, 
         title: 'ສຳເລັດ', 
         type: 'alert', 
-        data: `ບັນທຶກສຳເລັດແລ້ວທັງໝົດ ${validItems.length} ລາຍການ! ຍອດລວມ: ${billSummary.grandTotalOriginal.toLocaleString()} ${billCurrency} (${Math.round(billSummary.grandTotalLAK).toLocaleString()} ₭)` 
+        data: `ບັນທຶກສຳເລັດແລ້ວທັງໝົດ ${validItems.length} ລາຍການ! ຍອດລວມ: ${billSummary.grandTotalOriginal.toLocaleString()} ${billCurrency}` 
       });
     } finally {
       setSaveLoading(false);
@@ -237,7 +270,7 @@ export default function Suppliers() {
   return (
     <div className="space-y-6 font-sans pb-16">
       
-      {/* Header */}
+      {/* Header Banner */}
       <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 bg-white dark:bg-[#141414] p-6 rounded-3xl border border-slate-200/80 dark:border-neutral-800 shadow-xs">
         <div>
           <span className="bg-[#052659] dark:bg-white dark:text-neutral-950 text-white text-[9px] font-black px-2.5 py-1 rounded-full uppercase tracking-widest">
@@ -247,16 +280,17 @@ export default function Suppliers() {
             Supplier Quotes & Batch Invoices
           </h1>
           <p className="text-xs text-slate-400 mt-0.5">
-            ຄີພ້ອມກັນຫຼາຍລາຍການໃນບິນດຽວ (ຮອງຮັບເງິນບາດ THB, ກີບ LAK, ໂດລາ USD) ພ້ອມຕິດຮູບໃບບິນ
+            ບັນທຶກໃບບິນຊື້ເຄື່ອງ ແລະ ຈັດການສິນຄ້າ (COGS, ອຸປະກອນ, ດຳເນີນງານ)
           </p>
         </div>
 
+        {/* ປຸ່ມ "ເພີ່ມສິນຄ້າໃໝ່" */}
         <button
-          onClick={() => setAppModal({ isOpen: true, title: 'ເພີ່ມວັດຖຸດິບໃໝ່', type: 'add_product', inputValue: '', unitValue: 'g' })}
+          onClick={() => setIsAddProductModalOpen(true)}
           className="crystal-button !py-2.5 !px-4 flex items-center gap-1.5"
         >
           <Plus className="w-4 h-4" />
-          <span>+ ເພີ່ມວັດຖຸດິບໃໝ່</span>
+          <span>+ ເພີ່ມສິນຄ້າໃໝ່</span>
         </button>
       </div>
 
@@ -264,10 +298,9 @@ export default function Suppliers() {
       <div className="high-density-card p-6 space-y-6">
         <form onSubmit={handleSaveWholeBill} className="space-y-6">
           
-          {/* ສ່ວນຫົວໃບບິນ: ຮ້ານຄ້າ, ວັນທີ, ສະກຸນເງິນ, ເລດ, ຮູບໃບບິນ */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 border-b border-slate-100 dark:border-neutral-800 pb-6">
             
-            {/* 1. ຮ້ານຄ້າ */}
+            {/* ຮ້ານຄ້າ */}
             <div className="space-y-1">
               <div className="flex justify-between items-center">
                 <label className="label-xs">ຮ້ານຄ້າ (Supplier)</label>
@@ -288,7 +321,7 @@ export default function Suppliers() {
               </select>
             </div>
 
-            {/* 2. ວັນທີ */}
+            {/* ວັນທີ */}
             <div className="space-y-1">
               <label className="label-xs">ວັນທີຕາມໃບບິນ</label>
               <input
@@ -300,13 +333,10 @@ export default function Suppliers() {
               />
             </div>
 
-            {/* 3. ສະກຸນເງິນ & ເລດແລກປ່ຽນ (ສຳຄັນຫຼາຍສຳລັບບິນໄທ) */}
+            {/* ສະກຸນເງິນ & ເລດ */}
             <div className="space-y-1">
               <div className="flex justify-between items-center">
-                <label className="label-xs">ສະກຸນເງິນ</label>
-                {billCurrency !== 'LAK' && (
-                  <span className="text-[10px] text-amber-500 font-bold">ເລດ (1 {billCurrency} = ... ₭)</span>
-                )}
+                <label className="label-xs">ສະກຸນເງິນ & ເລດ</label>
               </div>
               <div className="flex gap-2">
                 <select
@@ -336,10 +366,10 @@ export default function Suppliers() {
               </div>
             </div>
 
-            {/* 4. ຮູບໃບບິນ (Drag/Drop/Ctrl+V) */}
+            {/* ຮູບໃບບິນ */}
             <div className="space-y-1">
               <label className="label-xs flex justify-between">
-                <span>ຮູບໃບບິນ (Receipt Image)</span>
+                <span>ຮູບໃບບິນ (Receipt Attachment)</span>
                 <span className="text-emerald-500 font-bold text-[9px]">Ctrl+V ວາງໄດ້</span>
               </label>
 
@@ -348,7 +378,10 @@ export default function Suppliers() {
                 onDrop={handleDrop}
                 className="border border-dashed border-slate-300 dark:border-neutral-700 rounded-xl p-2 text-center hover:bg-slate-50 dark:hover:bg-neutral-800/40 relative cursor-pointer flex items-center justify-between"
               >
-                <input type="file" accept="image/*" onChange={handleImageFileSelect} className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" />
+                <input type="file" accept="image/*" onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (file) setBillReceiptImage(await compressImage(file));
+                }} className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" />
                 {billReceiptImage ? (
                   <div className="flex items-center gap-2 text-left w-full justify-between">
                     <img src={billReceiptImage} alt="Receipt" className="w-8 h-8 object-cover rounded-lg border border-neutral-700" />
@@ -383,127 +416,140 @@ export default function Suppliers() {
             </div>
 
             <div className="space-y-3">
-              {billItems.map((item, idx) => (
-                <div key={idx} className="p-4 rounded-2xl bg-slate-50 dark:bg-[#1a1a1a] border border-slate-200/70 dark:border-neutral-800 space-y-3">
-                  <div className="flex items-center gap-3">
-                    <span className="w-5 h-5 rounded-full bg-slate-200 dark:bg-neutral-800 text-[10px] font-bold flex items-center justify-center font-mono">
-                      {idx + 1}
-                    </span>
+              {billItems.map((item, idx) => {
+                const prod = products.find(p => p.id === item.productId);
 
-                    {/* ເລືອກວັດຖຸດິບ */}
-                    <div className="flex-1">
-                      <select
-                        value={item.productId}
-                        onChange={e => {
-                          const pId = e.target.value;
-                          const pr = products.find(p => p.id === pId);
-                          setBillItems(prev => prev.map((it, i) => i === idx ? { 
-                            ...it, 
-                            productId: pId, 
-                            unit: pr?.unit || 'g', 
-                            quantityPerUnit: pr?.packSize || 1000 
-                          } : it));
-                        }}
-                        className="crystal-input w-full font-bold !py-2 text-xs"
-                      >
-                        <option value="">-- ເລືອກວັດຖຸດິບ --</option>
-                        {products.map(p => <option key={p.id} value={p.id}>{p.name} ({p.unit})</option>)}
-                      </select>
+                return (
+                  <div key={idx} className="p-4 rounded-2xl bg-slate-50 dark:bg-[#1a1a1a] border border-slate-200/70 dark:border-neutral-800 space-y-3">
+                    <div className="flex items-center gap-3">
+                      <span className="w-5 h-5 rounded-full bg-slate-200 dark:bg-neutral-800 text-[10px] font-bold flex items-center justify-center font-mono">
+                        {idx + 1}
+                      </span>
+
+                      {/* Product Image & Select */}
+                      <div className="flex-1 flex items-center gap-2">
+                        {prod?.productImage ? (
+                          <img src={prod.productImage} alt={prod.name} className="w-8 h-8 rounded-lg object-cover border border-neutral-700 shrink-0" />
+                        ) : (
+                          <div className="w-8 h-8 rounded-lg bg-neutral-200 dark:bg-neutral-800 flex items-center justify-center text-slate-400 shrink-0">
+                            <Package className="w-4 h-4" />
+                          </div>
+                        )}
+
+                        <select
+                          value={item.productId}
+                          onChange={e => {
+                            const pId = e.target.value;
+                            const pr = products.find(p => p.id === pId);
+                            setBillItems(prev => prev.map((it, i) => i === idx ? { 
+                              ...it, 
+                              productId: pId, 
+                              unit: pr?.unit || 'g', 
+                              quantityPerUnit: pr?.packSize || 1000 
+                            } : it));
+                          }}
+                          className="crystal-input w-full font-bold !py-2 text-xs"
+                        >
+                          <option value="">-- ເລືອກສິນຄ້າ --</option>
+                          {products.map(p => (
+                            <option key={p.id} value={p.id}>
+                              [{p.categoryType || 'COGS'}] {p.name} ({p.unit})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Mode (Total vs Per pack) */}
+                      <div className="flex bg-slate-200 dark:bg-neutral-800 rounded-xl p-0.5 text-[10px]">
+                        <button
+                          type="button"
+                          onClick={() => setBillItems(prev => prev.map((it, i) => i === idx ? { ...it, priceMode: 'total' } : it))}
+                          className={`px-2.5 py-1 rounded-lg font-bold cursor-pointer ${item.priceMode === 'total' ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950' : 'text-slate-400'}`}
+                        >
+                          ລາຄາລວມ
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setBillItems(prev => prev.map((it, i) => i === idx ? { ...it, priceMode: 'per_pack' } : it))}
+                          className={`px-2.5 py-1 rounded-lg font-bold cursor-pointer ${item.priceMode === 'per_pack' ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950' : 'text-slate-400'}`}
+                        >
+                          ຕໍ່ແພັກ
+                        </button>
+                      </div>
+
+                      {/* Price */}
+                      <div className="w-40">
+                        <div className="relative">
+                          <input
+                            type="text"
+                            placeholder={`ລາຄາ (${billCurrency})`}
+                            value={item.priceOriginal ? Number(item.priceOriginal).toLocaleString() : ''}
+                            onChange={e => {
+                              const raw = Number(e.target.value.replace(/,/g, '')) || 0;
+                              setBillItems(prev => prev.map((it, i) => i === idx ? { ...it, priceOriginal: raw } : it));
+                            }}
+                            className="crystal-input w-full !py-2 font-mono font-bold text-right text-xs pr-8"
+                          />
+                          <span className="absolute right-2.5 top-2 text-[10px] text-slate-400 font-bold">{billCurrency}</span>
+                        </div>
+                      </div>
+
+                      {billItems.length > 1 && (
+                        <button type="button" onClick={() => handleRemoveBillItemRow(idx)} className="p-1.5 text-rose-500 hover:bg-rose-500/10 rounded-lg cursor-pointer">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
 
-                    {/* ລາຄາລວມ ຫຼື ລາຄາຕໍ່ແພັກ */}
-                    <div className="flex bg-slate-200 dark:bg-neutral-800 rounded-xl p-0.5 text-[10px]">
-                      <button
-                        type="button"
-                        onClick={() => setBillItems(prev => prev.map((it, i) => i === idx ? { ...it, priceMode: 'total' } : it))}
-                        className={`px-2.5 py-1 rounded-lg font-bold cursor-pointer ${item.priceMode === 'total' ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950' : 'text-slate-400'}`}
-                      >
-                        ລາຄາລວມ
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setBillItems(prev => prev.map((it, i) => i === idx ? { ...it, priceMode: 'per_pack' } : it))}
-                        className={`px-2.5 py-1 rounded-lg font-bold cursor-pointer ${item.priceMode === 'per_pack' ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950' : 'text-slate-400'}`}
-                      >
-                        ຕໍ່ແພັກ
-                      </button>
-                    </div>
-
-                    {/* ຊ່ອງໃສ່ລາຄາຕາມບິນ */}
-                    <div className="w-40">
-                      <div className="relative">
+                    {/* Qty, Pack size, Unit, Remark */}
+                    <div className="grid grid-cols-4 gap-2 text-xs pt-1">
+                      <div>
+                        <span className="text-[9px] text-slate-400 block mb-0.5">ຈຳນວນແພັກ/ຖົງ</span>
+                        <input
+                          type="number"
+                          min="1"
+                          value={item.quantity}
+                          onChange={e => setBillItems(prev => prev.map((it, i) => i === idx ? { ...it, quantity: parseFloat(e.target.value) || 1 } : it))}
+                          className="crystal-input w-full !py-1 text-center font-bold"
+                        />
+                      </div>
+                      <div>
+                        <span className="text-[9px] text-slate-400 block mb-0.5">ຂະໜາດ/ແພັກ</span>
+                        <input
+                          type="number"
+                          value={item.quantityPerUnit}
+                          onChange={e => setBillItems(prev => prev.map((it, i) => i === idx ? { ...it, quantityPerUnit: parseFloat(e.target.value) || 1 } : it))}
+                          className="crystal-input w-full !py-1 text-center font-bold"
+                        />
+                      </div>
+                      <div>
+                        <span className="text-[9px] text-slate-400 block mb-0.5">ຫົວໜ່ວຍ (g/ml/pcs)</span>
                         <input
                           type="text"
-                          placeholder={`ລາຄາ (${billCurrency})`}
-                          value={item.priceOriginal ? Number(item.priceOriginal).toLocaleString() : ''}
-                          onChange={e => {
-                            const raw = Number(e.target.value.replace(/,/g, '')) || 0;
-                            setBillItems(prev => prev.map((it, i) => i === idx ? { ...it, priceOriginal: raw } : it));
-                          }}
-                          className="crystal-input w-full !py-2 font-mono font-bold text-right text-xs pr-8"
+                          value={item.unit}
+                          onChange={e => setBillItems(prev => prev.map((it, i) => i === idx ? { ...it, unit: e.target.value } : it))}
+                          className="crystal-input w-full !py-1 text-center font-bold uppercase"
                         />
-                        <span className="absolute right-2.5 top-2 text-[10px] text-slate-400 font-bold">{billCurrency}</span>
+                      </div>
+                      <div>
+                        <span className="text-[9px] text-slate-400 block mb-0.5">ໝາຍເຫດ</span>
+                        <input
+                          type="text"
+                          placeholder="ໝາຍເຫດ..."
+                          value={item.remark}
+                          onChange={e => setBillItems(prev => prev.map((it, i) => i === idx ? { ...it, remark: e.target.value } : it))}
+                          className="crystal-input w-full !py-1"
+                        />
                       </div>
                     </div>
-
-                    {billItems.length > 1 && (
-                      <button type="button" onClick={() => handleRemoveBillItemRow(idx)} className="p-1.5 text-rose-500 hover:bg-rose-500/10 rounded-lg cursor-pointer">
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    )}
                   </div>
-
-                  {/* ແຖວ 2: ຈຳນວນແພັກ, ຂະໜາດ/ແພັກ, ຫົວໜ່ວຍ, ໝາຍເຫດ */}
-                  <div className="grid grid-cols-4 gap-2 text-xs pt-1">
-                    <div>
-                      <span className="text-[9px] text-slate-400 block mb-0.5">ຈຳນວນແພັກ/ຖົງ</span>
-                      <input
-                        type="number"
-                        min="1"
-                        placeholder="ເຊັ່ນ: 1 ຫຼື 2"
-                        value={item.quantity}
-                        onChange={e => setBillItems(prev => prev.map((it, i) => i === idx ? { ...it, quantity: parseFloat(e.target.value) || 1 } : it))}
-                        className="crystal-input w-full !py-1 text-center font-bold"
-                      />
-                    </div>
-                    <div>
-                      <span className="text-[9px] text-slate-400 block mb-0.5">ຂະໜາດຕໍ່ແພັກ (ເຊັ່ນ 1kg = 1000)</span>
-                      <input
-                        type="number"
-                        placeholder="1000"
-                        value={item.quantityPerUnit}
-                        onChange={e => setBillItems(prev => prev.map((it, i) => i === idx ? { ...it, quantityPerUnit: parseFloat(e.target.value) || 1 } : it))}
-                        className="crystal-input w-full !py-1 text-center font-bold"
-                      />
-                    </div>
-                    <div>
-                      <span className="text-[9px] text-slate-400 block mb-0.5">ຫົວໜ່ວຍສູດ (g/ml/pcs/pack)</span>
-                      <input
-                        type="text"
-                        placeholder="g"
-                        value={item.unit}
-                        onChange={e => setBillItems(prev => prev.map((it, i) => i === idx ? { ...it, unit: e.target.value } : it))}
-                        className="crystal-input w-full !py-1 text-center font-bold"
-                      />
-                    </div>
-                    <div>
-                      <span className="text-[9px] text-slate-400 block mb-0.5">ໝາຍເຫດ</span>
-                      <input
-                        type="text"
-                        placeholder="ໝາຍເຫດ..."
-                        value={item.remark}
-                        onChange={e => setBillItems(prev => prev.map((it, i) => i === idx ? { ...it, remark: e.target.value } : it))}
-                        className="crystal-input w-full !py-1"
-                      />
-                    </div>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
-          {/* 🌟 ແຖບກວດສອບຍອດລວມທັງໝົດຂອງໃບບິນ (GRAND TOTAL VERIFICATION) */}
-          <div className="p-4 rounded-2xl bg-[#052659]/5 dark:bg-white/5 border border-[#052659]/10 dark:border-white/10 flex flex-col sm:flex-row justify-between sm:items-center gap-3">
+          {/* Grand Total Verification */}
+          <div className="p-4 rounded-2xl bg-neutral-100 dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 flex flex-col sm:flex-row justify-between sm:items-center gap-3">
             <div>
               <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider flex items-center gap-1.5">
                 <Calculator className="w-3.5 h-3.5" />
@@ -526,7 +572,6 @@ export default function Suppliers() {
             </div>
           </div>
 
-          {/* ປຸ່ມ Action */}
           <div className="flex justify-between items-center pt-2">
             <button
               type="button"
@@ -547,7 +592,7 @@ export default function Suppliers() {
         </form>
       </div>
 
-      {/* ຕາຕະລາງປະຫວັດລາຄາ */}
+      {/* Table */}
       <div className="high-density-card p-6 overflow-hidden">
         <div className="flex justify-between items-center border-b border-slate-100 dark:border-neutral-800 pb-3 mb-4">
           <div>
@@ -589,8 +634,15 @@ export default function Suppliers() {
                     <tr key={item.id} className="hover:bg-slate-50/50 dark:hover:bg-neutral-800/30">
                       <td className="p-3 font-mono text-slate-400">{item.date}</td>
                       <td className="p-3 font-bold text-slate-800 dark:text-white">
-                        {prod?.name || 'Item'}
-                        <span className="text-[10px] text-slate-400 block font-normal">{item.quantity}ແພັກ × {item.quantityPerUnit}{item.unit}</span>
+                        <div className="flex items-center gap-2">
+                          {prod?.productImage && (
+                            <img src={prod.productImage} alt={prod.name} className="w-7 h-7 rounded-lg object-cover border border-neutral-700 shrink-0" />
+                          )}
+                          <div>
+                            <span>{prod?.name || 'Item'}</span>
+                            <span className="text-[10px] text-slate-400 block font-normal">{item.quantity}ແພັກ × {item.quantityPerUnit}{item.unit}</span>
+                          </div>
+                        </div>
                       </td>
                       <td className="p-3 font-medium">{item.supplier}</td>
                       <td className="p-3 text-right font-mono font-medium whitespace-nowrap">
@@ -619,6 +671,130 @@ export default function Suppliers() {
         </div>
       </div>
 
+      {/* 📦 MODAL "ເພີ່ມສິນຄ້າໃໝ່" (ເລືອກປະເພດ COGS/ອຸປະກອນ/ດຳເນີນງານ + ຮູບສິນຄ້າ) */}
+      {isAddProductModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setIsAddProductModalOpen(false)}>
+          <div className="bg-white dark:bg-[#141414] rounded-3xl p-6 border border-slate-200 dark:border-neutral-800 max-w-md w-full space-y-4" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center border-b border-slate-100 dark:border-neutral-800 pb-3">
+              <h3 className="text-sm font-serif text-slate-800 dark:text-white flex items-center gap-2">
+                <Package className="w-4 h-4 text-emerald-500" />
+                <span>ເພີ່ມສິນຄ້າໃໝ່ (New Product / Asset)</span>
+              </h3>
+              <button onClick={() => setIsAddProductModalOpen(false)} className="text-slate-400 hover:text-white">✕</button>
+            </div>
+
+            <form onSubmit={handleSaveNewProduct} className="space-y-4">
+              
+              {/* ຊື່ສິນຄ້າ */}
+              <div>
+                <label className="label-xs block mb-1">ຊື່ສິນຄ້າ / ວັດຖຸດິບ</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="ເຊັ່ນ: ໄຊຣັບວານິລາ, ນົມສົດ, ຖາດໄມ້..."
+                  value={newProductForm.name}
+                  onChange={e => setNewProductForm({ ...newProductForm, name: e.target.value })}
+                  className="crystal-input w-full !text-xs font-bold"
+                />
+              </div>
+
+              {/* 🌟 ເລືອກປະເພດ: COGS, ອຸປະກອນ, ດຳເນີນງານ */}
+              <div>
+                <label className="label-xs block mb-1.5">ປະເພດສິນຄ້າ (Product Category)</label>
+                <div className="grid grid-cols-3 gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setNewProductForm({ ...newProductForm, categoryType: 'COGS', unit: 'g' })}
+                    className={`p-2 rounded-xl text-xs font-bold border text-center cursor-pointer ${newProductForm.categoryType === 'COGS' ? 'bg-amber-500/10 border-amber-500 text-amber-500' : 'border-neutral-800 text-slate-400'}`}
+                  >
+                    COGS (ວັດຖຸດິບ)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNewProductForm({ ...newProductForm, categoryType: 'EQUIPMENT', unit: 'pcs' })}
+                    className={`p-2 rounded-xl text-xs font-bold border text-center cursor-pointer ${newProductForm.categoryType === 'EQUIPMENT' ? 'bg-purple-500/10 border-purple-500 text-purple-500' : 'border-neutral-800 text-slate-400'}`}
+                  >
+                    ອຸປະກອນ (Asset)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNewProductForm({ ...newProductForm, categoryType: 'OPERATIONAL', unit: 'pack' })}
+                    className={`p-2 rounded-xl text-xs font-bold border text-center cursor-pointer ${newProductForm.categoryType === 'OPERATIONAL' ? 'bg-blue-500/10 border-blue-500 text-blue-500' : 'border-neutral-800 text-slate-400'}`}
+                  >
+                    ດຳເນີນງານ (OPEX)
+                  </button>
+                </div>
+              </div>
+
+              {/* ຫົວໜ່ວຍ & ຂະໜາດຕໍ່ແພັກ */}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="label-xs block mb-1">ຫົວໜ່ວຍ (Unit)</label>
+                  <select
+                    value={newProductForm.unit}
+                    onChange={e => setNewProductForm({ ...newProductForm, unit: e.target.value })}
+                    className="crystal-input w-full font-bold cursor-pointer"
+                  >
+                    <option value="g">g (ກຣາມ)</option>
+                    <option value="ml">ml (ມິນລິລິດ / ຂວດ)</option>
+                    <option value="pcs">pcs (ອັນ/ແກ້ວ/ຖາດ)</option>
+                    <option value="pack">pack (ແພັກ)</option>
+                    <option value="box">box (ແກັດ)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="label-xs block mb-1">ຂະໜາດຕໍ່ແພັກ</label>
+                  <input
+                    type="number"
+                    value={newProductForm.packSize}
+                    onChange={e => setNewProductForm({ ...newProductForm, packSize: parseFloat(e.target.value) || 1000 })}
+                    className="crystal-input w-full font-mono font-bold text-center"
+                    placeholder="1000"
+                  />
+                </div>
+              </div>
+
+              {/* 📸 ອັບໂຫຼດຮູບສິນຄ້າ (File / Drag & Drop / Ctrl+V) */}
+              <div>
+                <label className="label-xs flex justify-between mb-1">
+                  <span>ຮູບພາບສິນຄ້າ (Product Photo)</span>
+                  <span className="text-emerald-500 font-bold text-[9px]">Ctrl+V ວາງໄດ້</span>
+                </label>
+                <div className="border border-dashed border-slate-300 dark:border-neutral-700 rounded-xl p-3 relative flex items-center justify-between">
+                  <input 
+                    type="file" 
+                    accept="image/*" 
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const b64 = await compressImage(file);
+                        setNewProductForm(prev => ({ ...prev, productImage: b64 }));
+                      }
+                    }} 
+                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" 
+                  />
+                  {newProductForm.productImage ? (
+                    <div className="flex items-center gap-2 w-full justify-between">
+                      <img src={newProductForm.productImage} alt="Product" className="w-10 h-10 rounded-lg object-cover border border-neutral-700" />
+                      <span className="text-xs text-emerald-500 font-bold">ອັບໂຫຼດຮູບສິນຄ້າແລ້ວ ✓</span>
+                      <button type="button" onClick={(e) => { e.stopPropagation(); setNewProductForm(prev => ({ ...prev, productImage: '' })); }} className="text-rose-500 p-1">✕</button>
+                    </div>
+                  ) : (
+                    <span className="text-xs text-slate-400 mx-auto flex items-center gap-1.5"><ImageIcon className="w-4 h-4" /> ຄລິກເລືອກຮູບ ຫຼື ກົດ Ctrl+V</span>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button type="button" onClick={() => setIsAddProductModalOpen(false)} className="px-4 py-2 rounded-xl border text-xs font-bold text-slate-400">ຍົກເລີກ</button>
+                <button type="submit" className="crystal-button">ບັນທຶກສິນຄ້າ</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Modal Preview Image */}
       {previewImage && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm" onClick={() => setPreviewImage(null)}>
@@ -629,40 +805,17 @@ export default function Suppliers() {
         </div>
       )}
 
-      {/* In-App Popups */}
+      {/* In-App Popups (ບໍ່ໃຊ້ alert browser) */}
       {appModal.isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm" onClick={() => setAppModal({ ...appModal, isOpen: false })}>
           <div className="bg-white dark:bg-[#141414] rounded-3xl p-6 border border-slate-200 dark:border-neutral-800 max-w-md w-full space-y-4" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center border-b border-slate-100 dark:border-neutral-800 pb-3">
-              <h3 className="text-sm font-serif text-slate-800 dark:text-white">{appModal.title}</h3>
-              <button onClick={() => setAppModal({ ...appModal, isOpen: false })} className="text-slate-400 hover:text-white">✕</button>
-            </div>
-
+            <h3 className="text-sm font-serif text-slate-800 dark:text-white border-b border-neutral-800 pb-2">{appModal.title}</h3>
             {appModal.type === 'alert' && (
-              <div className="space-y-4 text-xs text-slate-600 dark:text-slate-300">
-                <p>{appModal.data}</p>
+              <div className="space-y-4 text-xs">
+                <p className="text-slate-400">{appModal.data}</p>
                 <button onClick={() => setAppModal({ ...appModal, isOpen: false })} className="crystal-button w-full">ເຂົ້າໃຈແລ້ວ</button>
               </div>
             )}
-
-            {appModal.type === 'delete_quote' && (
-              <div className="space-y-4 text-xs">
-                <p className="text-slate-600 dark:text-slate-300">ທ່ານແນ່ໃຈບໍ່ວ່າຕ້ອງການລຶບລາຍການລາຄານີ້?</p>
-                <div className="flex gap-2">
-                  <button onClick={() => setAppModal({ ...appModal, isOpen: false })} className="flex-1 py-2.5 rounded-xl border text-slate-400">ຍົກເລີກ</button>
-                  <button 
-                    onClick={async () => {
-                      if (appModal.data) await deleteDoc(doc(db, 'supplierPrices', appModal.data));
-                      setAppModal({ ...appModal, isOpen: false });
-                    }} 
-                    className="flex-1 py-2.5 rounded-xl bg-rose-600 text-white font-bold"
-                  >
-                    ລຶບທັນທີ
-                  </button>
-                </div>
-              </div>
-            )}
-
             {appModal.type === 'add_supplier' && (
               <div className="space-y-3">
                 <input
@@ -684,43 +837,6 @@ export default function Suppliers() {
                   className="crystal-button w-full"
                 >
                   ບັນທຶກຊື່ຮ້ານຄ້າ
-                </button>
-              </div>
-            )}
-
-            {appModal.type === 'add_product' && (
-              <div className="space-y-3">
-                <input
-                  type="text"
-                  placeholder="ຊື່ວັດຖຸດິບ..."
-                  value={appModal.inputValue || ''}
-                  onChange={e => setAppModal({ ...appModal, inputValue: e.target.value })}
-                  className="crystal-input w-full !text-xs font-bold"
-                />
-                <input
-                  type="text"
-                  placeholder="ຫົວໜ່ວຍ (ເຊັ່ນ: g, ml, pcs)..."
-                  value={appModal.unitValue || 'g'}
-                  onChange={e => setAppModal({ ...appModal, unitValue: e.target.value })}
-                  className="crystal-input w-full !text-xs font-bold"
-                />
-                <button
-                  onClick={async () => {
-                    const name = appModal.inputValue?.trim();
-                    if (name) {
-                      await addDoc(collection(db, 'products'), {
-                        name,
-                        unit: appModal.unitValue || 'g',
-                        packSize: 1000,
-                        minStock: 100,
-                        createdAt: serverTimestamp()
-                      });
-                    }
-                    setAppModal({ ...appModal, isOpen: false });
-                  }}
-                  className="crystal-button w-full"
-                >
-                  ບັນທຶກວັດຖຸດິບ
                 </button>
               </div>
             )}
