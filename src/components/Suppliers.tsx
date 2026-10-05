@@ -2,16 +2,17 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { auth, db, handleFirestoreError, OperationType } from '../firebase';
 import { 
   collection, addDoc, onSnapshot, query, orderBy, 
-  deleteDoc, doc, updateDoc, serverTimestamp 
+  deleteDoc, doc, updateDoc, serverTimestamp, getDocs, where 
 } from 'firebase/firestore';
 import { 
   Plus, Trash2, Edit2, Save, X, Search, 
-  Receipt, Upload, Eye, Calculator, Package, ImageIcon, Camera
+  Receipt, Upload, Eye, Calculator, Package, ImageIcon, 
+  Building2, Check, ZoomIn, Layers
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useTranslation } from 'react-i18next';
 
-// Helper ບີບອັດຮູບ
+// Helper ບີບອັດຮູບໃບບິນ ແລະ ຮູບສິນຄ້າ
 const compressImage = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -45,7 +46,6 @@ const compressImage = (file: File): Promise<string> => {
 
 interface BillItemRow {
   productId: string;
-  name: string;
   quantity: number | string;
   quantityPerUnit: number | string;
   unit: string;
@@ -58,31 +58,41 @@ export default function Suppliers() {
   const { i18n } = useTranslation();
   const [products, setProducts] = useState<any[]>([]);
   const [supplierPrices, setSupplierPrices] = useState<any[]>([]);
-  const [supplierList, setSupplierList] = useState<string[]>(['ລັກຂະນາແພກ', 'LATDA', 'CHANHOM', 'DMART', 'HEAVENLY', 'Makro']);
+  const [firestoreSuppliers, setFirestoreSuppliers] = useState<{ id: string; name: string }[]>([]);
   const [filter, setFilter] = useState('');
 
-  // 1. ຫົວໃບບິນ Batch Bill
-  const [billSupplier, setBillSupplier] = useState('ລັກຂະນາແພກ');
+  // 1. ຫົວໃບບິນ Batch Invoice State
+  const [billSupplier, setBillSupplier] = useState('');
   const [billCurrency, setBillCurrency] = useState<'THB' | 'LAK' | 'USD'>('THB');
   const [billExchangeRate, setBillExchangeRate] = useState<number>(680);
   const [billDate, setBillDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [billTime, setBillTime] = useState(format(new Date(), 'HH:mm'));
   const [billReceiptImage, setBillReceiptImage] = useState('');
   
-  // 2. ລາຍການເຄື່ອງໃນບິນ
+  // 2. ລາຍການເຄື່ອງໃນບິນ (Multi-item rows)
   const [billItems, setBillItems] = useState<BillItemRow[]>([
-    { productId: '', name: '', quantity: 1, quantityPerUnit: 1000, unit: 'g', priceOriginal: '', priceMode: 'total', remark: '' }
+    { productId: '', quantity: 1, quantityPerUnit: 1000, unit: 'g', priceOriginal: '', priceMode: 'total', remark: '' }
   ]);
 
   const [saveLoading, setSaveLoading] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
-  // 📝 STATE ສຳລັບການແກ້ໄຂລາຍການ (EDIT RECORD & UPDATE PRODUCT PHOTO)
+  // 🏪 Supplier Manager Modal State (ແກ້ໄຂຊື່ຮ້ານຄ້າທີ່ສະກົດຜິດ)
+  const [isSupplierManagerOpen, setIsSupplierManagerOpen] = useState(false);
+  const [editingSupplierId, setEditingSupplierId] = useState<string | null>(null);
+  const [editSupplierName, setEditSupplierName] = useState('');
+  const [newSupplierInput, setNewSupplierInput] = useState('');
+
+  // 📦 Product Manager Modal State (ແກ້ໄຂສິນຄ້າ, ປ່ຽນປະເພດ COGS <-> CAPEX <-> OPEX)
+  const [isProductManagerOpen, setIsProductManagerOpen] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<any | null>(null);
+
+  // 📝 Edit Quote Modal
   const [editingItem, setEditingItem] = useState<any | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editPriceDisplay, setEditPriceDisplay] = useState('');
 
-  // 📦 New Product Modal
+  // 📦 Add New Product Modal
   const [isAddProductModalOpen, setIsAddProductModalOpen] = useState(false);
   const [newProductForm, setNewProductForm] = useState({
     name: '',
@@ -93,28 +103,40 @@ export default function Suppliers() {
     productImage: ''
   });
 
-  const [appModal, setAppModal] = useState<{
-    isOpen: boolean;
-    title: string;
-    type: 'add_supplier' | 'delete_quote' | 'alert';
-    data?: any;
-    inputValue?: string;
-  }>({ isOpen: false, title: '', type: 'alert' });
+  // Modal alert
+  const [appModal, setAppModal] = useState<{ isOpen: boolean; title: string; type: 'delete_quote' | 'alert'; data?: any }>({ isOpen: false, title: '', type: 'alert' });
 
+  // 🔄 1. Listen to Products, Quotes, and Firestore Suppliers
   useEffect(() => {
     const unsubP = onSnapshot(query(collection(db, 'products'), orderBy('name')), snap => {
       setProducts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     });
+
     const unsubS = onSnapshot(query(collection(db, 'supplierPrices'), orderBy('createdAt', 'desc')), snap => {
-      const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      setSupplierPrices(data);
-      const unique = Array.from(new Set([...supplierList, ...data.map(d => d.supplier).filter(Boolean)]));
-      setSupplierList(unique);
+      setSupplierPrices(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     });
-    return () => { unsubP(); unsubS(); };
+
+    // 🌟 Listen to Real Firestore `suppliers` Collection
+    const unsubSuppliers = onSnapshot(query(collection(db, 'suppliers'), orderBy('name')), async snap => {
+      if (snap.empty) {
+        // Auto-seed initial default suppliers if collection is empty
+        const defaults = ['ລັກຂະນາແພກ', 'Makro', 'LATDA', 'CHANHOM', 'DMART', 'HEAVENLY'];
+        for (const name of defaults) {
+          await addDoc(collection(db, 'suppliers'), { name, createdAt: serverTimestamp() });
+        }
+      } else {
+        const sups = snap.docs.map(d => ({ id: d.id, name: d.data().name }));
+        setFirestoreSuppliers(sups);
+        if (!billSupplier && sups.length > 0) {
+          setBillSupplier(sups[0].name);
+        }
+      }
+    });
+
+    return () => { unsubP(); unsubS(); unsubSuppliers(); };
   }, []);
 
-  // Ctrl+V Paste
+  // 📋 Clipboard Paste (Ctrl+V)
   useEffect(() => {
     const handlePaste = async (e: ClipboardEvent) => {
       const items = e.clipboardData?.items;
@@ -125,10 +147,11 @@ export default function Suppliers() {
           if (file) {
             const base64 = await compressImage(file);
             if (isEditModalOpen && editingItem) {
-              // ຖ້າເປີດ Modal ແກ້ໄຂ: ໃຫ້ default ໃສ່ຮູບສິນຄ້າ
               setEditingItem((prev: any) => ({ ...prev, productImage: base64 }));
             } else if (isAddProductModalOpen) {
               setNewProductForm(prev => ({ ...prev, productImage: base64 }));
+            } else if (isProductManagerOpen && editingProduct) {
+              setEditingProduct((prev: any) => ({ ...prev, productImage: base64 }));
             } else {
               setBillReceiptImage(base64);
             }
@@ -138,7 +161,7 @@ export default function Suppliers() {
     };
     window.addEventListener('paste', handlePaste);
     return () => window.removeEventListener('paste', handlePaste);
-  }, [isEditModalOpen, editingItem, isAddProductModalOpen]);
+  }, [isEditModalOpen, editingItem, isAddProductModalOpen, isProductManagerOpen, editingProduct]);
 
   const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
@@ -152,7 +175,7 @@ export default function Suppliers() {
   const handleAddBillItemRow = () => {
     setBillItems(prev => [
       ...prev,
-      { productId: '', name: '', quantity: 1, quantityPerUnit: 1000, unit: 'g', priceOriginal: '', priceMode: 'total', remark: '' }
+      { productId: '', quantity: 1, quantityPerUnit: 1000, unit: 'g', priceOriginal: '', priceMode: 'total', remark: '' }
     ]);
   };
 
@@ -176,7 +199,7 @@ export default function Suppliers() {
     };
   }, [billItems, billCurrency, billExchangeRate]);
 
-  // 🚀 ບັນທຶກໃບບິນຊື້ເຄື່ອງທັງໝົດ
+  // 🚀 ບັນທຶກທຸກລາຍການໃນໃບບິນ
   const handleSaveWholeBill = async (e: React.FormEvent) => {
     e.preventDefault();
     const validItems = billItems.filter(it => it.productId && Number(String(it.priceOriginal).replace(/,/g, '')) > 0);
@@ -199,7 +222,7 @@ export default function Suppliers() {
 
         return addDoc(collection(db, 'supplierPrices'), {
           productId: item.productId,
-          supplier: billSupplier,
+          supplier: billSupplier || 'General Store',
           currency: billCurrency,
           exchangeRate: rate,
           priceOriginal: singlePrice,
@@ -224,7 +247,7 @@ export default function Suppliers() {
 
       setBillReceiptImage('');
       setBillItems([
-        { productId: '', name: '', quantity: 1, quantityPerUnit: 1000, unit: 'g', priceOriginal: '', priceMode: 'total', remark: '' }
+        { productId: '', quantity: 1, quantityPerUnit: 1000, unit: 'g', priceOriginal: '', priceMode: 'total', remark: '' }
       ]);
       setAppModal({ 
         isOpen: true, 
@@ -237,13 +260,81 @@ export default function Suppliers() {
     }
   };
 
-  // 📝 ເປີດ Modal ແກ້ໄຂ (ດຶງທັງຮູບໃບບິນ ແລະ ຮູບສິນຄ້າຈາກ products ມາພ້ອມກັນ)
+  // 🏪 ຈັດການຮ້ານຄ້າ: ແກ້ໄຂຊື່ຮ້ານຄ້າທີ່ສະກົດຜິດ (ພ້ອມປ່ຽນຊື່ໃນໃບບິນເກົ່າອັດຕະໂນມັດ)
+  const handleUpdateSupplierName = async (supplierId: string, oldName: string) => {
+    if (!editSupplierName.trim() || editSupplierName.trim() === oldName) {
+      setEditingSupplierId(null);
+      return;
+    }
+
+    const newName = editSupplierName.trim();
+    try {
+      // 1. Update in Firestore `suppliers` collection
+      await updateDoc(doc(db, 'suppliers', supplierId), { name: newName });
+
+      // 2. Auto batch update in historical `supplierPrices` so old records reflect the fix!
+      const q = query(collection(db, 'supplierPrices'), where('supplier', '==', oldName));
+      const snap = await getDocs(q);
+      const updates = snap.docs.map(d => updateDoc(doc(db, 'supplierPrices', d.id), { supplier: newName }));
+      await Promise.all(updates);
+
+      if (billSupplier === oldName) setBillSupplier(newName);
+      setEditingSupplierId(null);
+      setEditSupplierName('');
+    } catch (err: any) {
+      alert("Error: " + err.message);
+    }
+  };
+
+  const handleAddNewSupplierToFirestore = async () => {
+    if (!newSupplierInput.trim()) return;
+    try {
+      const docRef = await addDoc(collection(db, 'suppliers'), {
+        name: newSupplierInput.trim(),
+        createdAt: serverTimestamp()
+      });
+      setBillSupplier(newSupplierInput.trim());
+      setNewSupplierInput('');
+    } catch (err: any) {
+      alert("Error: " + err.message);
+    }
+  };
+
+  const handleDeleteSupplierFromFirestore = async (supplierId: string, supName: string) => {
+    if (!confirm(`ທ່ານແນ່ໃຈບໍ່ວ່າຕ້ອງການລຶບຮ້ານຄ້າ "${supName}"?`)) return;
+    try {
+      await deleteDoc(doc(db, 'suppliers', supplierId));
+      if (billSupplier === supName) setBillSupplier(firestoreSuppliers[0]?.name || '');
+    } catch (err: any) {
+      alert("Error: " + err.message);
+    }
+  };
+
+  // 📦 ຈັດການສິນຄ້າ: ປ່ຽນປະເພດ COGS <-> CAPEX (ອຸປະກອນ) <-> OPEX (ດຳເນີນງານ)
+  const handleSaveProductEdits = async () => {
+    if (!editingProduct) return;
+    try {
+      await updateDoc(doc(db, 'products', editingProduct.id), {
+        name: editingProduct.name.trim(),
+        categoryType: editingProduct.categoryType, // 🌟 'COGS' | 'EQUIPMENT' | 'OPERATIONAL'
+        unit: editingProduct.unit || 'g',
+        packSize: Number(editingProduct.packSize) || 1000,
+        isDurable: editingProduct.categoryType === 'EQUIPMENT',
+        productImage: editingProduct.productImage || '',
+        updatedAt: serverTimestamp()
+      });
+      setEditingProduct(null);
+    } catch (err: any) {
+      alert("Error: " + err.message);
+    }
+  };
+
+  // 📝 ເປີດ Modal ແກ້ໄຂລາຍການ
   const handleOpenEditModal = (item: any) => {
     const rawVal = item.priceMode === 'total' 
       ? (item.totalPriceOriginal || item.priceOriginal * item.quantity)
       : item.priceOriginal;
 
-    // ດຶງຂໍ້ມູນສິນຄ້າຕົວຈິງຈາກ collection products
     const associatedProduct = products.find(p => p.id === item.productId);
 
     setEditingItem({
@@ -251,13 +342,13 @@ export default function Suppliers() {
       priceInput: rawVal,
       priceMode: item.priceMode || 'total',
       exchangeRate: item.currency === 'LAK' ? 1 : (item.exchangeRate || 1),
-      productImage: associatedProduct?.productImage || '' // ✨ ດຶງຮູບສິນຄ້າທີ່ມີຢູ່ມາໂຊ
+      productImage: associatedProduct?.productImage || '',
+      categoryType: associatedProduct?.categoryType || 'COGS'
     });
     setEditPriceDisplay(Number(rawVal).toLocaleString());
     setIsEditModalOpen(true);
   };
 
-  // 💾 ບັນທຶກການແກ້ໄຂ (ອັບເດດທັງ supplierPrices ແລະ ອັບເດດຮູບສິນຄ້າລົງ products)
   const handleSaveEditedItem = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingItem) return;
@@ -273,7 +364,6 @@ export default function Suppliers() {
       const totalOriginal = editingItem.priceMode === 'total' ? rawPrice : rawPrice * qty;
       const totalPriceLAK = totalOriginal * rate;
 
-      // 1. ອັບເດດລາຍການຊື້ໃນ supplierPrices
       await updateDoc(doc(db, 'supplierPrices', editingItem.id), {
         productId: editingItem.productId,
         supplier: editingItem.supplier,
@@ -294,10 +384,12 @@ export default function Suppliers() {
         updatedAt: serverTimestamp()
       });
 
-      // 2. ✨ ສຳຄັນທີ່ສຸດ: ອັບເດດຮູບສິນຄ້າ (productImage) ລົງໃນ collection `products`!
+      // Update product image and categoryType if changed
       if (editingItem.productId) {
         await updateDoc(doc(db, 'products', editingItem.productId), {
           productImage: editingItem.productImage || '',
+          categoryType: editingItem.categoryType || 'COGS',
+          isDurable: editingItem.categoryType === 'EQUIPMENT',
           unit: editingItem.unit || 'g',
           packSize: Number(editingItem.quantityPerUnit) || 1000,
           updatedAt: serverTimestamp()
@@ -306,12 +398,6 @@ export default function Suppliers() {
 
       setIsEditModalOpen(false);
       setEditingItem(null);
-      setAppModal({ 
-        isOpen: true, 
-        title: 'ສຳເລັດ', 
-        type: 'alert', 
-        data: 'ປັບປຸງຂໍ້ມູນລາຄາ ແລະ ຮູບພາບສິນຄ້າສຳເລັດແລ້ວ!' 
-      });
     } finally {
       setSaveLoading(false);
     }
@@ -323,7 +409,7 @@ export default function Suppliers() {
     if (!newProductForm.name.trim()) return;
 
     try {
-      await addDoc(collection(db, 'products'), {
+      const docRef = await addDoc(collection(db, 'products'), {
         name: newProductForm.name.trim(),
         categoryType: newProductForm.categoryType,
         unit: newProductForm.unit || 'g',
@@ -333,6 +419,14 @@ export default function Suppliers() {
         isDurable: newProductForm.categoryType === 'EQUIPMENT',
         createdAt: serverTimestamp()
       });
+
+      // Auto assign into current active row
+      setBillItems(prev => prev.map((it, idx) => idx === 0 ? {
+        ...it,
+        productId: docRef.id,
+        unit: newProductForm.unit,
+        quantityPerUnit: newProductForm.packSize
+      } : it));
 
       setIsAddProductModalOpen(false);
       setNewProductForm({
@@ -352,7 +446,7 @@ export default function Suppliers() {
   return (
     <div className="space-y-6 font-sans pb-16">
       
-      {/* Header Banner */}
+      {/* 🚀 Header Banner & Management Buttons */}
       <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 bg-white dark:bg-[#141414] p-6 rounded-3xl border border-slate-200/80 dark:border-neutral-800 shadow-xs">
         <div>
           <span className="bg-[#052659] dark:bg-white dark:text-neutral-950 text-white text-[9px] font-black px-2.5 py-1 rounded-full uppercase tracking-widest">
@@ -366,31 +460,51 @@ export default function Suppliers() {
           </p>
         </div>
 
-        <button
-          onClick={() => setIsAddProductModalOpen(true)}
-          className="crystal-button !py-2.5 !px-4 flex items-center gap-1.5"
-        >
-          <Plus className="w-4 h-4" />
-          <span>+ ເພີ່ມສິນຄ້າໃໝ່</span>
-        </button>
+        {/* 🛠️ Action Buttons: ຈັດການສິນຄ້າ, ຈັດການຮ້ານຄ້າ, ເພີ່ມສິນຄ້າ (ບໍ່ມີ ++ ແລ້ວ) */}
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => setIsSupplierManagerOpen(true)}
+            className="px-3.5 py-2 rounded-2xl bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-900 dark:hover:bg-neutral-800 text-slate-700 dark:text-neutral-200 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer border border-slate-200 dark:border-neutral-800"
+          >
+            <Building2 className="w-3.5 h-3.5 text-sky-500" />
+            <span>ຈັດການຮ້ານຄ້າ</span>
+          </button>
+
+          <button
+            onClick={() => setIsProductManagerOpen(true)}
+            className="px-3.5 py-2 rounded-2xl bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-900 dark:hover:bg-neutral-800 text-slate-700 dark:text-neutral-200 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer border border-slate-200 dark:border-neutral-800"
+          >
+            <Layers className="w-3.5 h-3.5 text-amber-500" />
+            <span>ຈັດການສິນຄ້າ</span>
+          </button>
+
+          <button
+            onClick={() => setIsAddProductModalOpen(true)}
+            className="crystal-button !py-2.5 !px-4 flex items-center gap-1.5"
+          >
+            <Plus className="w-4 h-4" />
+            <span>ເພີ່ມສິນຄ້າໃໝ່</span>
+          </button>
+        </div>
       </div>
 
-      {/* Form Batch Bill */}
+      {/* 🧾 Form: Batch Bill Entry (ປັບ Layout ໃໝ່ສະອາດຕາ ບໍ່ຊ້ອນທັບກັນ) */}
       <div className="high-density-card p-6 space-y-6">
         <form onSubmit={handleSaveWholeBill} className="space-y-6">
           
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 border-b border-slate-100 dark:border-neutral-800 pb-6">
+          {/* Header Row: Supplier, Date, Currency, Exchange Rate, Receipt Upload */}
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-4 border-b border-slate-100 dark:border-neutral-800 pb-6">
             
-            {/* ຮ້ານຄ້າ */}
-            <div className="space-y-1">
+            {/* 1. ຮ້ານຄ້າ (4 cols) */}
+            <div className="md:col-span-4 space-y-1">
               <div className="flex justify-between items-center">
-                <label className="label-xs">ຮ້ານຄ້າ (Supplier)</label>
+                <label className="label-xs">ຮ້ານຄ້າ / ຜູ້ສະໜອງ (Supplier)</label>
                 <button
                   type="button"
-                  onClick={() => setAppModal({ isOpen: true, title: 'ເພີ່ມຊື່ຮ້ານຄ້າໃໝ່', type: 'add_supplier', inputValue: '' })}
+                  onClick={() => setIsSupplierManagerOpen(true)}
                   className="text-[10px] text-sky-500 hover:underline cursor-pointer"
                 >
-                  + ເພີ່ມຮ້ານ
+                  + ເພີ່ມ/ແກ້ໄຂຊື່ຮ້ານ
                 </button>
               </div>
               <select
@@ -398,12 +512,12 @@ export default function Suppliers() {
                 onChange={e => setBillSupplier(e.target.value)}
                 className="crystal-input w-full font-bold cursor-pointer"
               >
-                {supplierList.map(s => <option key={s} value={s}>{s}</option>)}
+                {firestoreSuppliers.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
               </select>
             </div>
 
-            {/* ວັນທີ */}
-            <div className="space-y-1">
+            {/* 2. ວັນທີຕາມໃບບິນ (2 cols) */}
+            <div className="md:col-span-2 space-y-1">
               <label className="label-xs">ວັນທີຕາມໃບບິນ</label>
               <input
                 type="date"
@@ -414,12 +528,12 @@ export default function Suppliers() {
               />
             </div>
 
-            {/* ສະກຸນເງິນ & ເລດ */}
-            <div className="space-y-1">
+            {/* 3. ສະກຸນເງິນ & ອັດຕາແລກປ່ຽນ (3 cols) */}
+            <div className="md:col-span-3 space-y-1">
               <div className="flex justify-between items-center">
                 <label className="label-xs">ສະກຸນເງິນ & ເລດ</label>
                 {billCurrency !== 'LAK' && (
-                  <span className="text-[10px] text-amber-500 font-bold">1 {billCurrency} = ... ₭</span>
+                  <span className="text-[10px] font-mono text-amber-500 font-bold">1 {billCurrency} = {billExchangeRate} ₭</span>
                 )}
               </div>
               <div className="flex gap-2">
@@ -432,7 +546,7 @@ export default function Suppliers() {
                     else if (c === 'THB') setBillExchangeRate(680);
                     else if (c === 'USD') setBillExchangeRate(22000);
                   }}
-                  className="crystal-input w-28 font-bold cursor-pointer"
+                  className="crystal-input w-24 font-bold cursor-pointer"
                 >
                   <option value="THB">THB (฿)</option>
                   <option value="LAK">LAK (₭)</option>
@@ -442,7 +556,7 @@ export default function Suppliers() {
                 <input
                   type="number"
                   disabled={billCurrency === 'LAK'}
-                  placeholder="ເລດ"
+                  placeholder="ເລດເງິນ"
                   value={billCurrency === 'LAK' ? 1 : billExchangeRate}
                   onChange={e => setBillExchangeRate(parseFloat(e.target.value) || 1)}
                   className="crystal-input flex-1 font-mono font-bold text-center disabled:opacity-40"
@@ -450,10 +564,10 @@ export default function Suppliers() {
               </div>
             </div>
 
-            {/* ຮູບໃບບິນ */}
-            <div className="space-y-1">
+            {/* 4. 📸 ຮູບໃບບິນ (3 cols) - ມີປຸ່ມຄລິກຊູມເບິ່ງຮູບໃຫຍ່ໄດ້ */}
+            <div className="md:col-span-3 space-y-1">
               <label className="label-xs flex justify-between">
-                <span>ຮູບໃບບິນ (Receipt Attachment)</span>
+                <span>ຮູບໃບບິນ (Receipt Image)</span>
                 <span className="text-emerald-500 font-bold text-[9px]">Ctrl+V ວາງໄດ້</span>
               </label>
 
@@ -466,11 +580,31 @@ export default function Suppliers() {
                   const file = e.target.files?.[0];
                   if (file) setBillReceiptImage(await compressImage(file));
                 }} className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" />
+                
                 {billReceiptImage ? (
                   <div className="flex items-center gap-2 text-left w-full justify-between">
-                    <img src={billReceiptImage} alt="Receipt" className="w-8 h-8 object-cover rounded-lg border border-neutral-700" />
-                    <span className="text-[11px] font-bold text-emerald-500 truncate flex-1 pl-1">ຕິດຮູບໃບບິນແລ້ວ ✓</span>
-                    <button type="button" onClick={(e) => { e.stopPropagation(); setBillReceiptImage(''); }} className="text-rose-500 p-1">✕</button>
+                    {/* ຄລິກທີ່ຮູບເພື່ອເບິ່ງຮູບໃຫຍ່ (Zoom) */}
+                    <div 
+                      onClick={(e) => { e.stopPropagation(); setPreviewImage(billReceiptImage); }}
+                      className="relative group/thumb cursor-pointer"
+                      title="ກົດເພື່ອເບິ່ງຮູບໃຫຍ່"
+                    >
+                      <img src={billReceiptImage} alt="Receipt" className="w-8 h-8 object-cover rounded-lg border border-neutral-700" />
+                      <div className="absolute inset-0 bg-black/50 rounded-lg flex items-center justify-center opacity-0 group-hover/thumb:opacity-100 transition-opacity">
+                        <ZoomIn className="w-3.5 h-3.5 text-white" />
+                      </div>
+                    </div>
+
+                    <span 
+                      onClick={(e) => { e.stopPropagation(); setPreviewImage(billReceiptImage); }}
+                      className="text-[11px] font-bold text-emerald-500 truncate flex-1 pl-1 cursor-pointer hover:underline"
+                    >
+                      ຕິດຮູບໃບບິນແລ້ວ 🔍
+                    </span>
+                    
+                    <button type="button" onClick={(e) => { e.stopPropagation(); setBillReceiptImage(''); }} className="text-rose-500 p-1">
+                      <X className="w-4 h-4" />
+                    </button>
                   </div>
                 ) : (
                   <div className="flex items-center gap-1.5 mx-auto text-slate-400 text-xs">
@@ -483,7 +617,7 @@ export default function Suppliers() {
 
           </div>
 
-          {/* ລາຍການສິນຄ້າໃນໃບບິນ */}
+          {/* 📦 ລາຍການສິນຄ້າໃນໃບບິນ (ຈັດ Layout ງາມຕາ ບໍ່ຊ້ອນທັບກັນ) */}
           <div className="space-y-3">
             <div className="flex justify-between items-center">
               <h4 className="text-xs font-serif uppercase tracking-wider text-slate-800 dark:text-white">
@@ -495,7 +629,7 @@ export default function Suppliers() {
                 className="text-xs font-bold text-sky-500 hover:underline flex items-center gap-1 cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
-                <span>+ ເພີ່ມລາຍການຊື້ໃນບິນນີ້</span>
+                <span>ເພີ່ມລາຍການຊື້ໃນບິນນີ້</span>
               </button>
             </div>
 
@@ -505,21 +639,35 @@ export default function Suppliers() {
 
                 return (
                   <div key={idx} className="p-4 rounded-2xl bg-slate-50 dark:bg-[#1a1a1a] border border-slate-200/70 dark:border-neutral-800 space-y-3">
-                    <div className="flex items-center gap-3">
-                      <span className="w-5 h-5 rounded-full bg-slate-200 dark:bg-neutral-800 text-[10px] font-bold flex items-center justify-center font-mono">
+                    
+                    {/* ແຖວເທິງ: ລຳດັບ, ຮູບ, Dropdown ສິນຄ້າ, ໂໝດລາຄາ, ແລະ ຊ່ອງລາຄາ (ແກ້ໄຂ THB THB ທີ່ຊ້ຳແລ້ວ) */}
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                      <span className="w-6 h-6 rounded-full bg-slate-200 dark:bg-neutral-800 text-[10px] font-bold flex items-center justify-center font-mono shrink-0">
                         {idx + 1}
                       </span>
 
-                      {/* ເລືອກສິນຄ້າ ພ້ອມໄອຄອນຮູບ */}
-                      <div className="flex-1 flex items-center gap-2">
+                      {/* ຮູບສິນຄ້າ (ຄລິກເບິ່ງຮູບໃຫຍ່ໄດ້) */}
+                      <div className="shrink-0">
                         {prod?.productImage ? (
-                          <img src={prod.productImage} alt={prod.name} className="w-8 h-8 rounded-lg object-cover border border-neutral-700 shrink-0" />
+                          <div 
+                            onClick={() => setPreviewImage(prod.productImage)}
+                            className="relative group/pimg cursor-pointer"
+                            title="ກົດເພື່ອເບິ່ງຮູບສິນຄ້າໃຫຍ່"
+                          >
+                            <img src={prod.productImage} alt={prod.name} className="w-9 h-9 rounded-xl object-cover border border-neutral-700" />
+                            <div className="absolute inset-0 bg-black/40 rounded-xl flex items-center justify-center opacity-0 group-hover/pimg:opacity-100 transition-opacity">
+                              <ZoomIn className="w-3.5 h-3.5 text-white" />
+                            </div>
+                          </div>
                         ) : (
-                          <div className="w-8 h-8 rounded-lg bg-neutral-200 dark:bg-neutral-800 flex items-center justify-center text-slate-400 shrink-0">
+                          <div className="w-9 h-9 rounded-xl bg-neutral-200 dark:bg-neutral-800 flex items-center justify-center text-slate-400">
                             <Package className="w-4 h-4" />
                           </div>
                         )}
+                      </div>
 
+                      {/* Dropdown ເລືອກສິນຄ້າ */}
+                      <div className="flex-1 min-w-[200px]">
                         <select
                           value={item.productId}
                           onChange={e => {
@@ -544,85 +692,90 @@ export default function Suppliers() {
                       </div>
 
                       {/* ໂໝດລາຄາ (ລວມ vs ຕໍ່ແພັກ) */}
-                      <div className="flex bg-slate-200 dark:bg-neutral-800 rounded-xl p-0.5 text-[10px]">
+                      <div className="flex bg-slate-200 dark:bg-neutral-800 rounded-xl p-0.5 text-[10px] shrink-0 self-center">
                         <button
                           type="button"
                           onClick={() => setBillItems(prev => prev.map((it, i) => i === idx ? { ...it, priceMode: 'total' } : it))}
-                          className={`px-2.5 py-1 rounded-lg font-bold cursor-pointer ${item.priceMode === 'total' ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950' : 'text-slate-400'}`}
+                          className={`px-3 py-1.5 rounded-lg font-bold cursor-pointer transition-all ${item.priceMode === 'total' ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950 shadow-xs' : 'text-slate-400'}`}
                         >
                           ລາຄາລວມ
                         </button>
                         <button
                           type="button"
                           onClick={() => setBillItems(prev => prev.map((it, i) => i === idx ? { ...it, priceMode: 'per_pack' } : it))}
-                          className={`px-2.5 py-1 rounded-lg font-bold cursor-pointer ${item.priceMode === 'per_pack' ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950' : 'text-slate-400'}`}
+                          className={`px-3 py-1.5 rounded-lg font-bold cursor-pointer transition-all ${item.priceMode === 'per_pack' ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950 shadow-xs' : 'text-slate-400'}`}
                         >
                           ຕໍ່ແພັກ
                         </button>
                       </div>
 
-                      {/* ຊ່ອງລາຄາ */}
-                      <div className="w-40">
+                      {/* ຊ່ອງໃສ່ລາຄາ (ແກ້ໄຂ THB THB ຊ້ອນກັນແລ້ວ) */}
+                      <div className="w-full sm:w-44 shrink-0">
                         <div className="relative">
                           <input
                             type="text"
-                            placeholder={`ລາຄາ (${billCurrency})`}
+                            placeholder="ລາຄາ"
                             value={item.priceOriginal ? Number(item.priceOriginal).toLocaleString() : ''}
                             onChange={e => {
                               const raw = Number(e.target.value.replace(/,/g, '')) || 0;
                               setBillItems(prev => prev.map((it, i) => i === idx ? { ...it, priceOriginal: raw } : it));
                             }}
-                            className="crystal-input w-full !py-2 font-mono font-bold text-right text-xs pr-8"
+                            className="crystal-input w-full !py-2 font-mono font-bold text-right text-xs pr-12"
                           />
-                          <span className="absolute right-2.5 top-2 text-[10px] text-slate-400 font-bold">{billCurrency}</span>
+                          <span className="absolute right-3 top-2.5 text-[10px] text-slate-400 font-bold pointer-events-none">
+                            {billCurrency}
+                          </span>
                         </div>
                       </div>
 
                       {billItems.length > 1 && (
-                        <button type="button" onClick={() => handleRemoveBillItemRow(idx)} className="p-1.5 text-rose-500 hover:bg-rose-500/10 rounded-lg cursor-pointer">
+                        <button type="button" onClick={() => handleRemoveBillItemRow(idx)} className="p-2 text-rose-500 hover:bg-rose-500/10 rounded-xl cursor-pointer self-center">
                           <Trash2 className="w-4 h-4" />
                         </button>
                       )}
                     </div>
 
-                    {/* ຈຳນວນ, ຂະໜາດ/ແພັກ, ຫົວໜ່ວຍ, ໝາຍເຫດ */}
-                    <div className="grid grid-cols-4 gap-2 text-xs pt-1">
+                    {/* ແຖວລຸ່ມ: 4 ຊ່ອງຂະໜານກັນງາມໆ (ຈຳນວນແພັກ, ຂະໜາດ/ແພັກ, ຫົວໜ່ວຍ, ໝາຍເຫດ) */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs pt-1 border-t border-slate-200/60 dark:border-neutral-800/60">
                       <div>
-                        <span className="text-[9px] text-slate-400 block mb-0.5">ຈຳນວນແພັກ/ຖົງ</span>
+                        <label className="text-[9px] font-bold text-slate-400 block mb-1">ຈຳນວນແພັກ/ຖົງ</label>
                         <input
                           type="number"
                           min="1"
+                          placeholder="1"
                           value={item.quantity}
                           onChange={e => setBillItems(prev => prev.map((it, i) => i === idx ? { ...it, quantity: parseFloat(e.target.value) || 1 } : it))}
-                          className="crystal-input w-full !py-1 text-center font-bold"
+                          className="crystal-input w-full !py-1.5 text-center font-bold"
                         />
                       </div>
                       <div>
-                        <span className="text-[9px] text-slate-400 block mb-0.5">ຂະໜາດ/ແພັກ</span>
+                        <label className="text-[9px] font-bold text-slate-400 block mb-1">ຂະໜາດຕໍ່ແພັກ</label>
                         <input
                           type="number"
+                          placeholder="1000"
                           value={item.quantityPerUnit}
                           onChange={e => setBillItems(prev => prev.map((it, i) => i === idx ? { ...it, quantityPerUnit: parseFloat(e.target.value) || 1 } : it))}
-                          className="crystal-input w-full !py-1 text-center font-bold"
+                          className="crystal-input w-full !py-1.5 text-center font-bold"
                         />
                       </div>
                       <div>
-                        <span className="text-[9px] text-slate-400 block mb-0.5">ຫົວໜ່ວຍ (g/ml/pcs)</span>
+                        <label className="text-[9px] font-bold text-slate-400 block mb-1">ຫົວໜ່ວຍ (g/ml/pcs)</label>
                         <input
                           type="text"
+                          placeholder="g"
                           value={item.unit}
                           onChange={e => setBillItems(prev => prev.map((it, i) => i === idx ? { ...it, unit: e.target.value } : it))}
-                          className="crystal-input w-full !py-1 text-center font-bold uppercase"
+                          className="crystal-input w-full !py-1.5 text-center font-bold uppercase"
                         />
                       </div>
                       <div>
-                        <span className="text-[9px] text-slate-400 block mb-0.5">ໝາຍເຫດ</span>
+                        <label className="text-[9px] font-bold text-slate-400 block mb-1">ໝາຍເຫດ</label>
                         <input
                           type="text"
                           placeholder="ໝາຍເຫດ..."
                           value={item.remark}
                           onChange={e => setBillItems(prev => prev.map((it, i) => i === idx ? { ...it, remark: e.target.value } : it))}
-                          className="crystal-input w-full !py-1"
+                          className="crystal-input w-full !py-1.5"
                         />
                       </div>
                     </div>
@@ -676,12 +829,12 @@ export default function Suppliers() {
         </form>
       </div>
 
-      {/* 📋 ຕາຕະລາງປະຫວັດລາຄາ & ປຸ່ມແກ້ໄຂ / ລຶບ */}
+      {/* 📋 ຕາຕະລາງປະຫວັດລາຄາ & ຮູບພາບ (ຄລິກຊູມເບິ່ງຮູບໃຫຍ່ໄດ້ທັງໝົດ) */}
       <div className="high-density-card p-6 overflow-hidden">
         <div className="flex justify-between items-center border-b border-slate-100 dark:border-neutral-800 pb-3 mb-4">
           <div>
             <h3 className="text-sm font-serif text-slate-800 dark:text-white">ປະຫວັດລາຄາ & ໃບບິນທັງໝົດ</h3>
-            <p className="text-xs text-slate-400">ກົດປຸ່ມສໍເພື່ອແກ້ໄຂລາຄາ ຫຼື ອັບໂຫຼດຮູບສິນຄ້າຕົວຈິງ</p>
+            <p className="text-xs text-slate-400">ກົດທີ່ຮູບສິນຄ້າ ຫຼື ໄອຄອນຕາເພື່ອເບິ່ງຮູບໃຫຍ່</p>
           </div>
           <input
             type="text"
@@ -718,15 +871,25 @@ export default function Suppliers() {
                     <tr key={item.id} className="hover:bg-slate-50/50 dark:hover:bg-neutral-800/30">
                       <td className="p-3 font-mono text-slate-400">{item.date}</td>
                       <td className="p-3 font-bold text-slate-800 dark:text-white">
-                        <div className="flex items-center gap-2">
-                          {/* 🖼️ ຮູບສິນຄ້າ (ຖ້າມີຈະໂຊຮູບ, ຖ້າບໍ່ມີຈະເປັນໄອຄອນກ່ອງ) */}
+                        <div className="flex items-center gap-2.5">
+                          {/* 🖼️ ຮູບສິນຄ້າ (ກົດເພື່ອຊູມເບິ່ງຮູບໃຫຍ່) */}
                           {prod?.productImage ? (
-                            <img src={prod.productImage} alt={prod.name} className="w-8 h-8 rounded-lg object-cover border border-neutral-700 shrink-0" />
+                            <div 
+                              onClick={() => setPreviewImage(prod.productImage)}
+                              className="relative group/pimg cursor-pointer shrink-0"
+                              title="ກົດເພື່ອເບິ່ງຮູບໃຫຍ່"
+                            >
+                              <img src={prod.productImage} alt={prod.name} className="w-8 h-8 rounded-lg object-cover border border-neutral-700" />
+                              <div className="absolute inset-0 bg-black/40 rounded-lg flex items-center justify-center opacity-0 group-hover/pimg:opacity-100 transition-opacity">
+                                <ZoomIn className="w-3.5 h-3.5 text-white" />
+                              </div>
+                            </div>
                           ) : (
                             <div className="w-8 h-8 rounded-lg bg-neutral-200 dark:bg-neutral-800 flex items-center justify-center text-slate-400 shrink-0">
                               <Package className="w-4 h-4" />
                             </div>
                           )}
+
                           <div>
                             <span>{prod?.name || 'Item'}</span>
                             <span className="text-[10px] text-slate-400 block font-normal">{item.quantity}ແພັກ × {item.quantityPerUnit}{item.unit}</span>
@@ -740,15 +903,21 @@ export default function Suppliers() {
                       <td className="p-3 text-right font-mono font-bold text-emerald-500 whitespace-nowrap">
                         {Math.round(total).toLocaleString()} ₭
                       </td>
+                      
+                      {/* 📸 ໃບບິນ (ກົດເພື່ອຊູມເບິ່ງຮູບໃຫຍ່) */}
                       <td className="p-3 text-center">
                         {item.receiptImage ? (
-                          <button onClick={() => setPreviewImage(item.receiptImage)} className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 cursor-pointer">
+                          <button 
+                            onClick={() => setPreviewImage(item.receiptImage)} 
+                            className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 cursor-pointer"
+                            title="ກົດເບິ່ງຮູບໃບບິນໃຫຍ່"
+                          >
                             <Eye className="w-3.5 h-3.5" />
                           </button>
                         ) : <span className="text-slate-500">-</span>}
                       </td>
 
-                      {/* 🛠️ ປຸ່ມແກ້ໄຂ (Edit2) ແລະ ປຸ່ມລຶບ (Trash2) */}
+                      {/* 🛠️ ປຸ່ມແກ້ໄຂ ແລະ ລຶບ */}
                       <td className="p-3 text-center">
                         <div className="flex items-center justify-center gap-1.5">
                           <button 
@@ -775,7 +944,276 @@ export default function Suppliers() {
         </div>
       </div>
 
-      {/* 📝 MODAL ແກ້ໄຂ: ຮອງຮັບທັງການປັບລາຄາ ແລະ ອັບໂຫຼດ "ຮູບສິນຄ້າຕົວຈິງ" */}
+      {/* 🏪 MODAL ຈັດການຮ້ານຄ້າ (MANAGE SUPPLIERS) - ແກ້ໄຂຊື່ຮ້ານຄ້າທີ່ສະກົດຜິດໃນ FIRESTORE! */}
+      {isSupplierManagerOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm" onClick={() => setIsSupplierManagerOpen(false)}>
+          <div className="bg-white dark:bg-[#141414] rounded-3xl p-6 border border-slate-200 dark:border-neutral-800 max-w-md w-full space-y-4 max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center border-b border-slate-100 dark:border-neutral-800 pb-3">
+              <div>
+                <h3 className="text-base font-serif text-slate-800 dark:text-white flex items-center gap-2">
+                  <Building2 className="w-4 h-4 text-sky-500" />
+                  <span>ຈັດການລາຍຊື່ຮ້ານຄ້າ (Suppliers List)</span>
+                </h3>
+                <p className="text-[10px] text-slate-400 mt-0.5">
+                  ແກ້ໄຂຊື່ຮ້ານທີ່ສະກົດຜິດ (ລະບົບຈະອັບເດດໃນບິນເກົ່າໃຫ້ເອງ)
+                </p>
+              </div>
+              <button onClick={() => setIsSupplierManagerOpen(false)} className="text-slate-400 hover:text-white p-1">✕</button>
+            </div>
+
+            {/* ເພີ່ມຮ້ານໃໝ່ */}
+            <div className="space-y-1.5">
+              <label className="label-xs">ເພີ່ມຮ້ານຄ້າໃໝ່ເຂົ້າ Firestore</label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="ຊື່ຮ້ານຄ້າໃໝ່..."
+                  value={newSupplierInput}
+                  onChange={e => setNewSupplierInput(e.target.value)}
+                  className="crystal-input flex-1 !text-xs font-bold"
+                />
+                <button
+                  type="button"
+                  onClick={handleAddNewSupplierToFirestore}
+                  className="crystal-button !py-2 !px-4 shrink-0"
+                >
+                  ເພີ່ມ
+                </button>
+              </div>
+            </div>
+
+            {/* ລາຍຊື່ຮ້ານຄ້າທີ່ມີຢູ່ ພ້ອມປຸ່ມແກ້ໄຂຊື່ */}
+            <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-neutral-800">
+              <label className="label-xs block">ລາຍຊື່ຮ້ານຄ້າໃນລະບົບ ({firestoreSuppliers.length} ຮ້ານ)</label>
+              <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+                {firestoreSuppliers.map(sup => (
+                  <div key={sup.id} className="p-2.5 rounded-xl bg-slate-50 dark:bg-[#1a1a1a] border border-slate-200/60 dark:border-neutral-800 flex items-center justify-between gap-2">
+                    {editingSupplierId === sup.id ? (
+                      <div className="flex items-center gap-1.5 flex-1">
+                        <input
+                          type="text"
+                          autoFocus
+                          value={editSupplierName}
+                          onChange={e => setEditSupplierName(e.target.value)}
+                          className="crystal-input flex-1 !py-1 !text-xs font-bold"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateSupplierName(sup.id, sup.name)}
+                          className="p-1.5 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditingSupplierId(null)}
+                          className="p-1.5 bg-neutral-200 dark:bg-neutral-800 text-slate-400 rounded-lg"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <span className="text-xs font-bold text-slate-800 dark:text-white truncate">{sup.name}</span>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => { setEditingSupplierId(sup.id); setEditSupplierName(sup.name); }}
+                            className="p-1.5 text-slate-400 hover:text-sky-500 rounded-lg cursor-pointer"
+                            title="ແກ້ໄຂຊື່ຮ້ານ"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteSupplierFromFirestore(sup.id, sup.name)}
+                            className="p-1.5 text-slate-400 hover:text-rose-500 rounded-lg cursor-pointer"
+                            title="ລຶບຮ້ານ"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 📦 MODAL ຈັດການສິນຄ້າ: ປ່ຽນປະເພດ COGS ➔ CAPEX (ອຸປະກອນ) ➔ OPEX (ດຳເນີນງານ) */}
+      {isProductManagerOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm" onClick={() => setIsProductManagerOpen(false)}>
+          <div className="bg-white dark:bg-[#141414] rounded-3xl p-6 border border-slate-200 dark:border-neutral-800 max-w-xl w-full space-y-4 max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center border-b border-slate-100 dark:border-neutral-800 pb-3">
+              <div>
+                <h3 className="text-base font-serif text-slate-800 dark:text-white flex items-center gap-2">
+                  <Layers className="w-4 h-4 text-amber-500" />
+                  <span>ຈັດການສິນຄ້າ & ປ່ຽນໝວດໝູ່ (Product Category Manager)</span>
+                </h3>
+                <p className="text-[10px] text-slate-400 mt-0.5">
+                  ແກ້ໄຂຊື່, ປ່ຽນປະເພດ COGS (ວັດຖຸດິບ) ເປັນ CAPEX (ອຸປະກອນ) ຫຼື OPEX
+                </p>
+              </div>
+              <button onClick={() => setIsProductManagerOpen(false)} className="text-slate-400 hover:text-white p-1">✕</button>
+            </div>
+
+            {editingProduct ? (
+              /* ຟອມແກ້ໄຂສິນຄ້າ */
+              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-[#1a1a1a] border border-slate-200/70 dark:border-neutral-800 space-y-4">
+                <h4 className="text-xs font-bold text-slate-700 dark:text-neutral-200">ກຳລັງແກ້ໄຂສິນຄ້າ: {editingProduct.name}</h4>
+                
+                <div>
+                  <label className="label-xs block mb-1">ຊື່ສິນຄ້າ</label>
+                  <input
+                    type="text"
+                    value={editingProduct.name}
+                    onChange={e => setEditingProduct({ ...editingProduct, name: e.target.value })}
+                    className="crystal-input w-full !text-xs font-bold"
+                  />
+                </div>
+
+                {/* 🌟 ປ່ຽນປະເພດສິນຄ້າ COGS / ອຸປະກອນ / ດຳເນີນງານ */}
+                <div>
+                  <label className="label-xs block mb-1.5">ປ່ຽນໝວດໝູ່ສິນຄ້າ</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setEditingProduct({ ...editingProduct, categoryType: 'COGS' })}
+                      className={`py-2 px-1 text-xs font-bold rounded-xl border text-center cursor-pointer transition-all ${editingProduct.categoryType === 'COGS' ? 'bg-amber-500/10 border-amber-500 text-amber-500 font-black' : 'border-neutral-800 text-slate-400'}`}
+                    >
+                      COGS (ວັດຖຸດິບ)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditingProduct({ ...editingProduct, categoryType: 'EQUIPMENT' })}
+                      className={`py-2 px-1 text-xs font-bold rounded-xl border text-center cursor-pointer transition-all ${editingProduct.categoryType === 'EQUIPMENT' ? 'bg-purple-500/10 border-purple-500 text-purple-500 font-black' : 'border-neutral-800 text-slate-400'}`}
+                    >
+                      ອຸປະກອນ (CAPEX)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditingProduct({ ...editingProduct, categoryType: 'OPERATIONAL' })}
+                      className={`py-2 px-1 text-xs font-bold rounded-xl border text-center cursor-pointer transition-all ${editingProduct.categoryType === 'OPERATIONAL' ? 'bg-blue-500/10 border-blue-500 text-blue-500 font-black' : 'border-neutral-800 text-slate-400'}`}
+                    >
+                      ດຳເນີນງານ (OPEX)
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="label-xs block mb-1">ຫົວໜ່ວຍ</label>
+                    <input
+                      type="text"
+                      value={editingProduct.unit}
+                      onChange={e => setEditingProduct({ ...editingProduct, unit: e.target.value })}
+                      className="crystal-input w-full !text-xs font-bold text-center uppercase"
+                    />
+                  </div>
+                  <div>
+                    <label className="label-xs block mb-1">ຂະໜາດຕໍ່ແພັກ</label>
+                    <input
+                      type="number"
+                      value={editingProduct.packSize}
+                      onChange={e => setEditingProduct({ ...editingProduct, packSize: parseFloat(e.target.value) || 1000 })}
+                      className="crystal-input w-full !text-xs font-mono font-bold text-center"
+                    />
+                  </div>
+                </div>
+
+                {/* ຮູບສິນຄ້າ */}
+                <div>
+                  <label className="label-xs flex justify-between mb-1">
+                    <span>ຮູບສິນຄ້າ (Ctrl+V ວາງໄດ້)</span>
+                  </label>
+                  <div className="border border-dashed border-slate-300 dark:border-neutral-700 rounded-xl p-2 relative flex items-center justify-between">
+                    <input type="file" accept="image/*" onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (file) setEditingProduct({ ...editingProduct, productImage: await compressImage(file) });
+                    }} className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" />
+                    {editingProduct.productImage ? (
+                      <div className="flex items-center gap-2 w-full justify-between">
+                        <img src={editingProduct.productImage} alt="Product" className="w-8 h-8 rounded-lg object-cover border border-neutral-700" />
+                        <span className="text-[11px] text-emerald-500 font-bold">ມີຮູບສິນຄ້າແລ້ວ ✓</span>
+                        <button type="button" onClick={() => setEditingProduct({ ...editingProduct, productImage: '' })} className="text-rose-500 p-1">✕</button>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-slate-400 mx-auto flex items-center gap-1.5"><ImageIcon className="w-3.5 h-3.5" /> ຄລິກ ຫຼື ວາງຮູບ (Ctrl+V)</span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2">
+                  <button type="button" onClick={() => setEditingProduct(null)} className="px-3.5 py-1.5 rounded-xl border text-xs text-slate-400">ຍົກເລີກ</button>
+                  <button type="button" onClick={handleSaveProductEdits} className="crystal-button !py-1.5 !px-5 text-xs">ບັນທຶກສິນຄ້າ</button>
+                </div>
+              </div>
+            ) : (
+              /* ລາຍຊື່ສິນຄ້າທັງໝົດ */
+              <div className="space-y-2">
+                <label className="label-xs block">ລາຍການສິນຄ້າໃນລະບົບ ({products.length} ລາຍການ)</label>
+                <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
+                  {products.map(p => (
+                    <div key={p.id} className="p-3 rounded-xl bg-slate-50 dark:bg-[#1a1a1a] border border-slate-200/60 dark:border-neutral-800 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        {p.productImage ? (
+                          <img src={p.productImage} alt={p.name} className="w-8 h-8 rounded-lg object-cover border border-neutral-700 shrink-0" />
+                        ) : (
+                          <div className="w-8 h-8 rounded-lg bg-neutral-200 dark:bg-neutral-800 flex items-center justify-center text-slate-400 shrink-0">
+                            <Package className="w-4 h-4" />
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <span className="text-xs font-bold text-slate-800 dark:text-white block truncate">{p.name}</span>
+                          <span className="text-[10px] text-slate-400 font-mono">
+                            {p.packSize}{p.unit}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${
+                          p.categoryType === 'EQUIPMENT' ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' :
+                          p.categoryType === 'OPERATIONAL' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' :
+                          'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                        }`}>
+                          {p.categoryType || 'COGS'}
+                        </span>
+                        
+                        <button
+                          type="button"
+                          onClick={() => setEditingProduct({ ...p, categoryType: p.categoryType || 'COGS' })}
+                          className="p-1.5 text-slate-400 hover:text-sky-500 rounded-lg cursor-pointer"
+                          title="ແກ້ໄຂໝວດໝູ່ & ຮູບ"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 🔍 MODAL LIGHTBOX: ເບິ່ງຮູບຂະໜາດໃຫຍ່ (ZOOM IMAGE VIEW) */}
+      {previewImage && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md" onClick={() => setPreviewImage(null)}>
+          <div className="relative max-w-2xl max-h-[90vh] bg-[#141414] rounded-3xl p-3 border border-neutral-800" onClick={e => e.stopPropagation()}>
+            <button onClick={() => setPreviewImage(null)} className="absolute top-4 right-4 p-2 rounded-full bg-black/70 text-white hover:bg-black cursor-pointer z-10">
+              <X className="w-5 h-5" />
+            </button>
+            <img src={previewImage} alt="Enlarged Preview" className="w-full h-auto max-h-[85vh] object-contain rounded-2xl shadow-2xl" />
+          </div>
+        </div>
+      )}
+
+      {/* 📝 MODAL ແກ້ໄຂລາຍການລາຄາ */}
       {isEditModalOpen && editingItem && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm" onClick={() => setIsEditModalOpen(false)}>
           <div className="bg-white dark:bg-[#141414] rounded-3xl p-6 border border-slate-200 dark:border-neutral-800 max-w-lg w-full space-y-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
@@ -783,18 +1221,16 @@ export default function Suppliers() {
               <div>
                 <h3 className="text-base font-serif text-slate-800 dark:text-white flex items-center gap-2">
                   <Edit2 className="w-4 h-4 text-sky-500" />
-                  <span>ແກ້ໄຂລາຍການລາຄາ & ອັບໂຫຼດຮູບສິນຄ້າ</span>
+                  <span>ແກ້ໄຂລາຍການລາຄາ & ໝວດໝູ່ສິນຄ້າ</span>
                 </h3>
                 <p className="text-[10px] text-slate-400 mt-0.5">
-                  ສາມາດອັບໂຫຼດຮູບສິນຄ້າຕົວຈິງໃສ່ບ່ອນນີ້ ເພື່ອໃຫ້ໄປສະແດງໃນຕາຕະລາງໄດ້
+                  ສາມາດປ່ຽນໝວດໝູ່ COGS ➔ ອຸປະກອນ CAPEX ພ້ອມອັບໂຫຼດຮູບສິນຄ້າໄດ້
                 </p>
               </div>
               <button onClick={() => setIsEditModalOpen(false)} className="text-slate-400 hover:text-white p-1">✕</button>
             </div>
 
             <form onSubmit={handleSaveEditedItem} className="space-y-4">
-              
-              {/* ສິນຄ້າ */}
               <div>
                 <label className="label-xs block mb-1">ສິນຄ້າ / ວັດຖຸດິບ</label>
                 <select
@@ -806,7 +1242,8 @@ export default function Suppliers() {
                       ...editingItem, 
                       productId: pId, 
                       unit: pr?.unit || editingItem.unit,
-                      productImage: pr?.productImage || '' 
+                      productImage: pr?.productImage || '',
+                      categoryType: pr?.categoryType || 'COGS'
                     });
                   }}
                   className="crystal-input w-full font-bold cursor-pointer"
@@ -817,37 +1254,55 @@ export default function Suppliers() {
                 </select>
               </div>
 
-              {/* ✨ 1. ຊ່ອງອັບໂຫຼດ "ຮູບພາບສິນຄ້າຕົວຈິງ (Product Photo)" ທີ່ທ່ານຕ້ອງການ! */}
+              {/* 🌟 ປ່ຽນປະເພດສິນຄ້າໃນ Modal ແກ້ໄຂ */}
+              <div>
+                <label className="label-xs block mb-1">ປະເພດສິນຄ້າ (Product Category)</label>
+                <div className="grid grid-cols-3 gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setEditingItem({ ...editingItem, categoryType: 'COGS' })}
+                    className={`py-1.5 text-xs font-bold rounded-xl border text-center cursor-pointer ${editingItem.categoryType === 'COGS' ? 'bg-amber-500/10 border-amber-500 text-amber-500' : 'border-neutral-800 text-slate-400'}`}
+                  >
+                    COGS (ວັດຖຸດິບ)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditingItem({ ...editingItem, categoryType: 'EQUIPMENT' })}
+                    className={`py-1.5 text-xs font-bold rounded-xl border text-center cursor-pointer ${editingItem.categoryType === 'EQUIPMENT' ? 'bg-purple-500/10 border-purple-500 text-purple-500' : 'border-neutral-800 text-slate-400'}`}
+                  >
+                    ອຸປະກອນ (CAPEX)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditingItem({ ...editingItem, categoryType: 'OPERATIONAL' })}
+                    className={`py-1.5 text-xs font-bold rounded-xl border text-center cursor-pointer ${editingItem.categoryType === 'OPERATIONAL' ? 'bg-blue-500/10 border-blue-500 text-blue-500' : 'border-neutral-800 text-slate-400'}`}
+                  >
+                    ດຳເນີນງານ (OPEX)
+                  </button>
+                </div>
+              </div>
+
+              {/* ຮູບສິນຄ້າ */}
               <div className="p-3.5 rounded-2xl bg-sky-500/10 border border-sky-500/20 space-y-1.5">
                 <label className="label-xs !text-sky-500 flex justify-between">
-                  <span className="flex items-center gap-1.5">
-                    <Camera className="w-3.5 h-3.5" />
-                    <span>ຮູບພາບສິນຄ້າຕົວຈິງ (Product Photo)</span>
-                  </span>
-                  <span className="font-bold text-[9px]">Ctrl+V ວາງໄດ້</span>
+                  <span>ຮູບພາບສິນຄ້າຕົວຈິງ (Product Photo)</span>
+                  <span className="font-bold text-[9px]">Ctrl+V</span>
                 </label>
-
-                <div className="border border-dashed border-sky-500/30 rounded-xl p-2.5 relative flex items-center justify-between hover:bg-sky-500/5 transition-colors">
+                <div className="border border-dashed border-sky-500/30 rounded-xl p-2.5 relative flex items-center justify-between">
                   <input type="file" accept="image/*" onChange={async (e) => {
                     const file = e.target.files?.[0];
-                    if (file) {
-                      const b64 = await compressImage(file);
-                      setEditingItem((prev: any) => ({ ...prev, productImage: b64 }));
-                    }
+                    if (file) setEditingItem((prev: any) => ({ ...prev, productImage: await compressImage(file) }));
                   }} className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" />
                   
                   {editingItem.productImage ? (
                     <div className="flex items-center gap-3 w-full justify-between">
-                      <img src={editingItem.productImage} alt="Product" className="w-10 h-10 rounded-lg object-cover border border-sky-400 shadow-xs" />
-                      <div className="flex-1 min-w-0">
-                        <span className="text-xs font-bold text-sky-500 block truncate">ອັບໂຫຼດຮູບສິນຄ້າແລ້ວ ✓</span>
-                        <span className="text-[9px] text-slate-400 block">ຮູບນີ້ຈະໄປສະແດງໃນຕາຕະລາງ ແລະ ຄັງສາງ</span>
-                      </div>
-                      <button type="button" onClick={(e) => { e.stopPropagation(); setEditingItem((prev: any) => ({ ...prev, productImage: '' })); }} className="text-rose-500 p-1">✕</button>
+                      <img src={editingItem.productImage} alt="Product" className="w-10 h-10 rounded-lg object-cover border border-sky-400" />
+                      <span className="text-xs font-bold text-sky-500 truncate flex-1 pl-1">ຕິດຮູບສິນຄ້າແລ້ວ ✓</span>
+                      <button type="button" onClick={() => setEditingItem((prev: any) => ({ ...prev, productImage: '' }))} className="text-rose-500 p-1">✕</button>
                     </div>
                   ) : (
                     <span className="text-xs text-sky-600 dark:text-sky-400 mx-auto flex items-center gap-1.5 font-bold">
-                      <Upload className="w-3.5 h-3.5" /> ຄລິກເລືອກຮູບສິນຄ້າ ຫຼື ກົດ Ctrl+V
+                      <Upload className="w-3.5 h-3.5" /> ຄລິກ ຫຼື ວາງຮູບສິນຄ້າ (Ctrl+V)
                     </span>
                   )}
                 </div>
@@ -862,7 +1317,7 @@ export default function Suppliers() {
                     onChange={e => setEditingItem({ ...editingItem, supplier: e.target.value })}
                     className="crystal-input w-full font-bold cursor-pointer"
                   >
-                    {supplierList.map(s => <option key={s} value={s}>{s}</option>)}
+                    {firestoreSuppliers.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
                   </select>
                 </div>
                 <div>
@@ -877,25 +1332,7 @@ export default function Suppliers() {
                 </div>
               </div>
 
-              {/* ໂໝດລາຄາ */}
-              <div className="grid grid-cols-2 gap-1.5 bg-slate-100 dark:bg-neutral-900 p-1 rounded-2xl">
-                <button
-                  type="button"
-                  onClick={() => setEditingItem({ ...editingItem, priceMode: 'total' })}
-                  className={`py-2 text-xs font-bold rounded-xl cursor-pointer ${editingItem.priceMode === 'total' ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950' : 'text-slate-400'}`}
-                >
-                  ລາຄາລວມ
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setEditingItem({ ...editingItem, priceMode: 'per_pack' })}
-                  className={`py-2 text-xs font-bold rounded-xl cursor-pointer ${editingItem.priceMode === 'per_pack' ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950' : 'text-slate-400'}`}
-                >
-                  ຕໍ່ແພັກ
-                </button>
-              </div>
-
-              {/* ລາຄາ, ສະກຸນເງິນ & ເລດ */}
+              {/* ລາຄາ, ສະກຸນເງິນ, ເລດ */}
               <div className="grid grid-cols-3 gap-2">
                 <div>
                   <label className="label-xs block mb-1">ລາຄາ</label>
@@ -967,40 +1404,27 @@ export default function Suppliers() {
                 </div>
               </div>
 
-              {/* ✨ 2. ຊ່ອງອັບໂຫຼດ/ແກ້ໄຂ "ຮູບໃບບິນ (Receipt Attachment)" */}
+              {/* ຮູບໃບບິນ */}
               <div>
                 <label className="label-xs flex justify-between mb-1">
-                  <span>ຮູບພາບໃບບິນຊື້ເຄື່ອງ (Receipt Attachment)</span>
+                  <span>ຮູບໃບບິນ (Receipt Attachment)</span>
                   <span className="text-emerald-500 font-bold text-[9px]">Ctrl+V</span>
                 </label>
                 <div className="border border-dashed border-slate-300 dark:border-neutral-700 rounded-xl p-2 relative flex items-center justify-between">
                   <input type="file" accept="image/*" onChange={async (e) => {
                     const file = e.target.files?.[0];
-                    if (file) {
-                      const b64 = await compressImage(file);
-                      setEditingItem({ ...editingItem, receiptImage: b64 });
-                    }
+                    if (file) setEditingItem({ ...editingItem, receiptImage: await compressImage(file) });
                   }} className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" />
                   {editingItem.receiptImage ? (
                     <div className="flex items-center gap-2 w-full justify-between">
                       <img src={editingItem.receiptImage} alt="Receipt" className="w-8 h-8 rounded-lg object-cover border border-neutral-700" />
                       <span className="text-[11px] font-bold text-emerald-500 truncate flex-1 pl-1">ຕິດຮູບໃບບິນແລ້ວ ✓</span>
-                      <button type="button" onClick={(e) => { e.stopPropagation(); setEditingItem({ ...editingItem, receiptImage: '' }); }} className="text-rose-500 p-1">✕</button>
+                      <button type="button" onClick={() => setEditingItem({ ...editingItem, receiptImage: '' })} className="text-rose-500 p-1">✕</button>
                     </div>
                   ) : (
                     <span className="text-xs text-slate-400 mx-auto flex items-center gap-1.5"><Upload className="w-3.5 h-3.5" /> ຄລິກ ຫຼື ວາງຮູບໃບບິນ</span>
                   )}
                 </div>
-              </div>
-
-              <div>
-                <label className="label-xs block mb-1">ໝາຍເຫດ</label>
-                <input
-                  type="text"
-                  value={editingItem.remark || ''}
-                  onChange={e => setEditingItem({ ...editingItem, remark: e.target.value })}
-                  className="crystal-input w-full !text-xs"
-                />
               </div>
 
               <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-neutral-800">
@@ -1054,7 +1478,7 @@ export default function Suppliers() {
                     onClick={() => setNewProductForm({ ...newProductForm, categoryType: 'EQUIPMENT', unit: 'pcs' })}
                     className={`p-2 rounded-xl text-xs font-bold border text-center cursor-pointer ${newProductForm.categoryType === 'EQUIPMENT' ? 'bg-purple-500/10 border-purple-500 text-purple-500' : 'border-neutral-800 text-slate-400'}`}
                   >
-                    ອຸປະກອນ (Asset)
+                    ອຸປະກອນ (CAPEX)
                   </button>
                   <button
                     type="button"
@@ -1094,7 +1518,6 @@ export default function Suppliers() {
                 </div>
               </div>
 
-              {/* ຮູບພາບສິນຄ້າ */}
               <div>
                 <label className="label-xs flex justify-between mb-1">
                   <span>ຮູບພາບສິນຄ້າ (Product Photo)</span>
@@ -1106,10 +1529,7 @@ export default function Suppliers() {
                     accept="image/*" 
                     onChange={async (e) => {
                       const file = e.target.files?.[0];
-                      if (file) {
-                        const b64 = await compressImage(file);
-                        setNewProductForm(prev => ({ ...prev, productImage: b64 }));
-                      }
+                      if (file) setNewProductForm(prev => ({ ...prev, productImage: await compressImage(file) }));
                     }} 
                     className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" 
                   />
@@ -1117,7 +1537,7 @@ export default function Suppliers() {
                     <div className="flex items-center gap-2 w-full justify-between">
                       <img src={newProductForm.productImage} alt="Product" className="w-10 h-10 rounded-lg object-cover border border-neutral-700" />
                       <span className="text-xs text-emerald-500 font-bold">ອັບໂຫຼດຮູບສິນຄ້າແລ້ວ ✓</span>
-                      <button type="button" onClick={(e) => { e.stopPropagation(); setNewProductForm(prev => ({ ...prev, productImage: '' })); }} className="text-rose-500 p-1">✕</button>
+                      <button type="button" onClick={() => setNewProductForm(prev => ({ ...prev, productImage: '' }))} className="text-rose-500 p-1">✕</button>
                     </div>
                   ) : (
                     <span className="text-xs text-slate-400 mx-auto flex items-center gap-1.5"><ImageIcon className="w-4 h-4" /> ຄລິກເລືອກຮູບ ຫຼື ກົດ Ctrl+V</span>
@@ -1134,17 +1554,7 @@ export default function Suppliers() {
         </div>
       )}
 
-      {/* Modal Preview Image */}
-      {previewImage && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm" onClick={() => setPreviewImage(null)}>
-          <div className="relative max-w-xl max-h-[85vh] bg-[#141414] rounded-3xl p-3 border border-neutral-800" onClick={e => e.stopPropagation()}>
-            <button onClick={() => setPreviewImage(null)} className="absolute top-4 right-4 p-2 rounded-full bg-black/60 text-white cursor-pointer">✕</button>
-            <img src={previewImage} alt="Receipt" className="w-full h-auto max-h-[80vh] object-contain rounded-2xl" />
-          </div>
-        </div>
-      )}
-
-      {/* In-App Popups (ລຶບ/ແຈ້ງເຕືອນ) */}
+      {/* 💬 In-App Popups (ລຶບ/ແຈ້ງເຕືອນ) */}
       {appModal.isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm" onClick={() => setAppModal({ ...appModal, isOpen: false })}>
           <div className="bg-white dark:bg-[#141414] rounded-3xl p-6 border border-slate-200 dark:border-neutral-800 max-w-md w-full space-y-4" onClick={e => e.stopPropagation()}>
@@ -1170,30 +1580,6 @@ export default function Suppliers() {
                     ລຶບທັນທີ
                   </button>
                 </div>
-              </div>
-            )}
-            {appModal.type === 'add_supplier' && (
-              <div className="space-y-3">
-                <input
-                  type="text"
-                  placeholder="ໃສ່ຊື່ຜູ້ສະໜອງໃໝ່..."
-                  value={appModal.inputValue || ''}
-                  onChange={e => setAppModal({ ...appModal, inputValue: e.target.value })}
-                  className="crystal-input w-full !text-xs font-bold"
-                />
-                <button
-                  onClick={() => {
-                    const name = appModal.inputValue?.trim();
-                    if (name) {
-                      setSupplierList(prev => Array.from(new Set([...prev, name])));
-                      setBillSupplier(name);
-                    }
-                    setAppModal({ ...appModal, isOpen: false });
-                  }}
-                  className="crystal-button w-full"
-                >
-                  ບັນທຶກຊື່ຮ້ານຄ້າ
-                </button>
               </div>
             )}
           </div>
