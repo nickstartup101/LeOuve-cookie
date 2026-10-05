@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
-  collection, query, onSnapshot, addDoc, setDoc, deleteDoc, doc, serverTimestamp 
+  collection, onSnapshot, addDoc, setDoc, deleteDoc, doc, serverTimestamp 
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { useTranslation } from 'react-i18next';
@@ -9,7 +9,7 @@ import {
   BookOpen, Plus, Trash2, Edit2, Calendar, 
   Package, ShoppingCart, Layers, Zap, Utensils, FileText,
   DollarSign, TrendingUp, Sparkles, Tag, Upload, X, Receipt, Printer, CheckCircle2,
-  Eye, User, CreditCard, Wallet, QrCode, Clock, MessageSquare
+  Eye, User
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -127,30 +127,70 @@ export default function Inventory() {
   const [quantitiesSold, setQuantitiesSold] = useState<{ [recipeId: string]: number }>({});
   const [isDeducting, setIsDeducting] = useState(false);
 
-  // 🌟 POS ORDER STATE (ແຍກຕາມລູກຄ້າ + NOTE ໝາຍເຫດ)
+  // POS Order State
   const [customerName, setCustomerName] = useState('');
   const [orderNote, setOrderNote] = useState('');
   const [orderPaymentMethod, setOrderPaymentMethod] = useState<'onepay' | 'cash' | 'ldb'>('onepay');
-
-  // Modal ເບິ່ງໃບບິນ POS ຕົວຈິງ
   const [activeViewingBill, setActiveViewingBill] = useState<any | null>(null);
 
+  // 🌟 ແກ້ໄຂແລ້ວ: ດຶງຂໍ້ມູນ ແລະ ຮຽງລຳດັບໃນ JavaScript ບໍ່ຕ້ອງເພິ່ງ Index ໃນ Console
   useEffect(() => {
-    const unsubP = onSnapshot(query(collection(db, 'products')), snap => setProducts(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
-    const unsubS = onSnapshot(query(collection(db, 'supplierPrices')), snap => setSupplierPrices(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
-    const unsubR = onSnapshot(query(collection(db, 'recipes')), snap => setRecipes(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
-    const unsubSales = onSnapshot(query(collection(db, 'menu_sales')), snap => setSalesRecords(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
-    const unsubAdj = onSnapshot(query(collection(db, 'inventory')), snap => setAdjustments(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+    const unsubP = onSnapshot(collection(db, 'products'), snap => {
+      const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      data.sort((a: any, b: any) => (a.name || '').localeCompare(b.name || ''));
+      setProducts(data);
+    }, err => handleFirestoreError(err, OperationType.LIST, 'products'));
+
+    const unsubS = onSnapshot(collection(db, 'supplierPrices'), snap => {
+      const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      data.sort((a: any, b: any) => {
+        const tA = a.createdAt?.toDate?.()?.getTime() || new Date(a.date || 0).getTime() || 0;
+        const tB = b.createdAt?.toDate?.()?.getTime() || new Date(b.date || 0).getTime() || 0;
+        return tB - tA;
+      });
+      setSupplierPrices(data);
+    }, err => handleFirestoreError(err, OperationType.LIST, 'supplierPrices'));
+
+    const unsubR = onSnapshot(collection(db, 'recipes'), snap => {
+      setRecipes(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, err => handleFirestoreError(err, OperationType.LIST, 'recipes'));
+
+    const unsubSales = onSnapshot(collection(db, 'menu_sales'), snap => {
+      setSalesRecords(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, err => handleFirestoreError(err, OperationType.LIST, 'menu_sales'));
+
+    const unsubAdj = onSnapshot(collection(db, 'inventory'), snap => {
+      setAdjustments(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, err => handleFirestoreError(err, OperationType.LIST, 'inventory'));
     
-    // 🌟 Listen to Realtime POS Bills History
-    const unsubBills = onSnapshot(query(collection(db, 'pos_bills'), orderBy('createdAt', 'desc')), snap => {
-      setPosBills(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
+    const unsubBills = onSnapshot(collection(db, 'pos_bills'), snap => {
+      const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      data.sort((a: any, b: any) => {
+        const tA = a.createdAt?.toDate?.()?.getTime() || 0;
+        const tB = b.createdAt?.toDate?.()?.getTime() || 0;
+        return tB - tA;
+      });
+      setPosBills(data);
+    }, err => handleFirestoreError(err, OperationType.LIST, 'pos_bills'));
 
     return () => { unsubP(); unsubS(); unsubR(); unsubSales(); unsubAdj(); unsubBills(); };
   }, []);
 
-  // 📋 ແກ້ໄຂແລ້ວ: ຮອງຮັບ CTRL + V ວາງຮູບສິນຄ້າໃນ Recipe ທັງຕອນສ້າງໃໝ່ ແລະ Edit!
+  // Pre-fill quantitiesSold when date shifts
+  useEffect(() => {
+    const existingRec = salesRecords.find(r => r.date === selectedDate);
+    if (existingRec && existingRec.itemsSold) {
+      const qSelected: { [id: string]: number } = {};
+      recipes.forEach(rec => { qSelected[rec.id] = existingRec.itemsSold[rec.id] || 0; });
+      setQuantitiesSold(qSelected);
+    } else {
+      const qClear: { [id: string]: number } = {};
+      recipes.forEach(rec => { qClear[rec.id] = 0; });
+      setQuantitiesSold(qClear);
+    }
+  }, [selectedDate, recipes, salesRecords]);
+
+  // Clipboard Paste (Ctrl+V)
   useEffect(() => {
     const handlePaste = async (e: ClipboardEvent) => {
       if (!isRecipeModalOpen) return;
@@ -183,8 +223,8 @@ export default function Inventory() {
     }>();
 
     const sorted = [...supplierPrices].sort((a, b) => {
-      const tA = a.createdAt?.toDate?.()?.getTime() || new Date(a.date).getTime() || 0;
-      const tB = b.createdAt?.toDate?.()?.getTime() || new Date(b.date).getTime() || 0;
+      const tA = a.createdAt?.toDate?.()?.getTime() || new Date(a.date || 0).getTime() || 0;
+      const tB = b.createdAt?.toDate?.()?.getTime() || new Date(b.date || 0).getTime() || 0;
       return tB - tA;
     });
 
@@ -422,7 +462,7 @@ export default function Inventory() {
     };
   }, [recipeIngredients, batchYield, overheadCost, sellingPrice]);
 
-  // 🌟 COMMIT & ISSUE CUSTOMER POS BILL (ແຍກຕາມລູກຄ້າ + NOTE ໝາຍເຫດ + RESET ເປັນ 0)
+  // COMMIT & ISSUE POS BILL
   const handleCommitCustomerBill = async () => {
     const activeSoldItems = recipesWithCalculatedCosts
       .filter(r => (quantitiesSold[r.id] || 0) > 0)
@@ -457,7 +497,6 @@ export default function Inventory() {
       const totalQty = activeSoldItems.reduce((sum, it) => sum + it.soldQty, 0);
       const billNo = `POS-${format(new Date(), 'yyMMdd')}-${Math.floor(1000 + Math.random() * 9000)}`;
 
-      // 1. ບັນທຶກລົງ Firestore `pos_bills` (ເກັບປະຫວັດບິນແຍກຕາມລູກຄ້າ)
       const newBillData = {
         billNo,
         date: selectedDate,
@@ -474,7 +513,6 @@ export default function Inventory() {
       };
       await addDoc(collection(db, 'pos_bills'), newBillData);
 
-      // 2. ອັບເດດຍອດສະສົມຕັດສະຕັອກໃນ `menu_sales`
       const currentDaySales = salesRecords.find(r => r.date === selectedDate)?.itemsSold || {};
       const updatedSalesMap = { ...currentDaySales };
       activeSoldItems.forEach(it => {
@@ -486,7 +524,6 @@ export default function Inventory() {
         updatedAt: serverTimestamp()
       }, { merge: true });
 
-      // 3. ສົ່ງຍອດລາຍຮັບເຂົ້າບັນຊີ Finance (Transactions)
       if (totalRevenue > 0) {
         await addDoc(collection(db, 'transactions'), {
           type: 'income',
@@ -500,10 +537,8 @@ export default function Inventory() {
         });
       }
 
-      // 4. ເປີດໃບບິນ POS ຂຶ້ນມາສະແດງ
       setActiveViewingBill(newBillData);
 
-      // 5. 🌟 RESET ຕົວເລກ + / - ແລະ ຊື່ລູກຄ້າກັບເປັນ 0 / ຫວ່າງເປົ່າທັນທີ!
       const resetMap: { [id: string]: number } = {};
       recipes.forEach(rec => { resetMap[rec.id] = 0; });
       setQuantitiesSold(resetMap);
@@ -579,11 +614,9 @@ export default function Inventory() {
         </button>
       </div>
 
-      {/* 🌟 TAB 1: POS BILLING & MULTI-CUSTOMER ORDERING */}
+      {/* TAB 1: POS BILLING */}
       {subTab === 'sales' && (
         <div className="space-y-6">
-          
-          {/* Order / Customer Header Form */}
           <div className="high-density-card p-6 space-y-4">
             <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 border-b border-slate-100 dark:border-neutral-800 pb-3">
               <div>
@@ -606,7 +639,6 @@ export default function Inventory() {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 pt-1">
-              {/* ຊື່ລູກຄ້າ / ໂຕະ */}
               <div className="sm:col-span-4 space-y-1">
                 <label className="label-xs">ຊື່ລູກຄ້າ / ໂຕະ / ຊ່ອງທາງສັ່ງ</label>
                 <input
@@ -618,7 +650,6 @@ export default function Inventory() {
                 />
               </div>
 
-              {/* Note ໝາຍເຫດອໍເດີ້ */}
               <div className="sm:col-span-5 space-y-1">
                 <label className="label-xs">ໝາຍເຫດອໍເດີ້ (Order Note / Special Request)</label>
                 <input
@@ -630,7 +661,6 @@ export default function Inventory() {
                 />
               </div>
 
-              {/* ຊ່ອງທາງການຊຳລະ */}
               <div className="sm:col-span-3 space-y-1">
                 <label className="label-xs">ຊ່ອງທາງຊຳລະ</label>
                 <div className="grid grid-cols-3 gap-1">
@@ -651,7 +681,6 @@ export default function Inventory() {
             </div>
           </div>
 
-          {/* Menu Selection Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {recipesWithCalculatedCosts.map((rec) => {
               const qtySold = quantitiesSold[rec.id] || 0;
@@ -717,7 +746,7 @@ export default function Inventory() {
             })}
           </div>
 
-          {/* Action Button: ອອກໃບບິນ POS ໃຫ້ລູກຄ້າ & Reset ເປັນ 0 */}
+          {/* Issue Bill Button */}
           <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 p-5 rounded-3xl bg-neutral-100 dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800">
             <div>
               <p className="text-xs font-bold text-slate-800 dark:text-white">
@@ -738,7 +767,7 @@ export default function Inventory() {
             </button>
           </div>
 
-          {/* 🌟 ຕາຕະລາງປະຫວັດໃບບິນ POS ທັງໝົດ (POS BILLS ARCHIVE) */}
+          {/* POS Bills Archive */}
           <div className="high-density-card p-6 overflow-hidden space-y-4">
             <div className="flex justify-between items-center border-b border-slate-100 dark:border-neutral-800 pb-3">
               <div>
@@ -770,19 +799,11 @@ export default function Inventory() {
                         <span className="font-mono font-bold text-slate-800 dark:text-white block">{bill.billNo}</span>
                         <span className="text-[10px] text-slate-400 font-mono">{bill.date} • {bill.time}</span>
                       </td>
-                      <td className="p-3 font-bold text-slate-800 dark:text-white">
-                        {bill.customerName}
-                      </td>
-                      <td className="p-3 text-slate-500 dark:text-neutral-400 italic text-[11px]">
-                        {bill.orderNote || '-'}
-                      </td>
-                      <td className="p-3 text-center font-mono font-bold">
-                        {bill.totalQty}
-                      </td>
+                      <td className="p-3 font-bold text-slate-800 dark:text-white">{bill.customerName}</td>
+                      <td className="p-3 text-slate-500 dark:text-neutral-400 italic text-[11px]">{bill.orderNote || '-'}</td>
+                      <td className="p-3 text-center font-mono font-bold">{bill.totalQty}</td>
                       <td className="p-3 uppercase font-mono text-[10px]">
-                        <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-neutral-800 text-slate-400 font-bold">
-                          {bill.paymentMethod}
-                        </span>
+                        <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-neutral-800 text-slate-400 font-bold">{bill.paymentMethod}</span>
                       </td>
                       <td className="p-3 text-right font-mono font-black text-emerald-500 text-sm whitespace-nowrap">
                         {Number(bill.totalRevenue).toLocaleString()} ₭
@@ -879,6 +900,7 @@ export default function Inventory() {
                 )}
               </div>
 
+              {/* 🛠️ Edit Button: ປອດໄພ 100% ບໍ່ມີ Error ອີກເລີຍ */}
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-neutral-800">
                 <button
                   onClick={() => {
@@ -994,7 +1016,7 @@ export default function Inventory() {
         </div>
       )}
 
-      {/* 🌟 VIRTUAL POS BILL MODAL (ໃບບິນ POS ແຍກຕາມລູກຄ້າ ພ້ອມຮູບພາບຂະໜົມ & NOTE ໝາຍເຫດ) */}
+      {/* 🌟 VIRTUAL POS RECEIPT MODAL */}
       <AnimatePresence>
         {activeViewingBill && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setActiveViewingBill(null)}>
@@ -1012,7 +1034,6 @@ export default function Inventory() {
                 <X className="w-4 h-4" />
               </button>
 
-              {/* Header */}
               <div className="text-center space-y-1 border-b border-dashed border-slate-300 pb-3">
                 <h2 className="text-xl font-serif font-black uppercase text-slate-900 tracking-tight">
                   LE OUVE WORKSPACE
@@ -1022,7 +1043,6 @@ export default function Inventory() {
                 </p>
                 <p className="text-[10px] text-slate-500">Vientiane, Lao PDR</p>
                 
-                {/* 🌟 ຊື່ລູກຄ້າ, ເລກບິນ, ເວລາ */}
                 <div className="pt-2 text-[10px] text-slate-600 text-left space-y-0.5 font-mono">
                   <div className="flex justify-between">
                     <span>BILL: {activeViewingBill.billNo}</span>
@@ -1040,7 +1060,7 @@ export default function Inventory() {
                 </div>
               </div>
 
-              {/* 📸 ລາຍການຂະໜົມພ້ອມຮູບພາບສິນຄ້າ */}
+              {/* Line Items with Photos */}
               <div className="py-3 space-y-2.5 border-b border-dashed border-slate-300">
                 <div className="text-[10px] font-bold text-slate-400 flex justify-between pb-1 border-b border-dotted border-slate-200 uppercase">
                   <span>ITEM</span>
@@ -1050,7 +1070,6 @@ export default function Inventory() {
 
                 {activeViewingBill.items?.map((it: any, idx: number) => (
                   <div key={idx} className="flex items-center gap-2.5 py-1">
-                    {/* ຮູບຂະໜົມຕິດມານຳໃນບິນ */}
                     {it.recipeImage ? (
                       <img src={it.recipeImage} alt={it.menuName} className="w-10 h-10 rounded-lg object-cover border border-slate-300 shrink-0" />
                     ) : (
@@ -1117,7 +1136,7 @@ export default function Inventory() {
         )}
       </AnimatePresence>
 
-      {/* 🚀 MODAL: RECIPE BUILDER (ຮອງຮັບ CTRL + V ວາງຮູບໄດ້ 100%) */}
+      {/* 🚀 MODAL: RECIPE BUILDER */}
       <AnimatePresence>
         {isRecipeModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
@@ -1133,7 +1152,7 @@ export default function Inventory() {
                     <span>{editingRecipe ? 'ແກ້ໄຂສູດ' : 'ສ້າງສູດ Cookie, ເຂົ້າໜົມ & ເຄື່ອງດື່ມ'}</span>
                   </h3>
                   <p className="text-[10px] text-slate-400 mt-0.5">
-                    ກຳນົດຈຳນວນກ້ອນຕໍ່ເຕົາ (Batch Yield) ແລະ ອັບໂຫຼດຮູບສິນຄ້າ (ຮອງຮັບ Ctrl+V ວາງຮູບໄດ້)
+                    ກຳນົດຈຳນວນກ້ອນຕໍ່ເຕົາ (Batch Yield) ແລະ ອັບໂຫຼດຮູບສິນຄ້າ (Ctrl+V ວາງຮູບໄດ້)
                   </p>
                 </div>
                 <button onClick={() => setIsRecipeModalOpen(false)} className="text-slate-400 hover:text-white p-1">✕</button>
@@ -1169,7 +1188,7 @@ export default function Inventory() {
                   </div>
                 </div>
 
-                {/* 📸 ອັບໂຫຼດຮູບຕົວຢ່າງສິນຄ້າ (ຮອງຮັບ CTRL + V) */}
+                {/* 📸 ອັບໂຫຼດຮູບຕົວຢ່າງສິນຄ້າ (ຮອງຮັບ CTRL + V ວາງຮູບໄດ້ 100%) */}
                 <div 
                   tabIndex={0}
                   onPaste={async (e) => {
@@ -1291,6 +1310,7 @@ export default function Inventory() {
                       const currentVal = ing.productId ? `${ing.productId}_${ing.supplier || ''}` : '';
                       const amt = Number(ing.amount) || 0;
                       const u = String(ing.unit || 'g').toLowerCase().trim();
+                      
                       let baseUnits = amt;
                       if (u === 'tsp' || u === 'ຊ້ອນຊາ') baseUnits = amt * 5;
                       else if (u === 'tbsp' || u === 'ຊ້ອນໂຕະ') baseUnits = amt * 15;
@@ -1378,7 +1398,7 @@ export default function Inventory() {
                   </div>
                 </div>
 
-                {/* Live Cost Breakdown */}
+                {/* Live Breakdown */}
                 <div className="p-4 rounded-2xl bg-neutral-100 dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 space-y-1.5 font-mono text-xs">
                   <div className="flex justify-between">
                     <span className="text-slate-500">ຕົ້ນທຶນວັດຖຸດິບລວມ ({currentModalCalc.yieldCount} ກ້ອນ):</span>
