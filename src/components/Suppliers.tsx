@@ -2,15 +2,16 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { auth, db, handleFirestoreError, OperationType } from '../firebase';
 import { 
   collection, addDoc, onSnapshot, query, orderBy, 
-  deleteDoc, doc, serverTimestamp 
+  deleteDoc, doc, updateDoc, serverTimestamp 
 } from 'firebase/firestore';
 import { 
-  Plus, Trash2, Save, X, Search, 
-  Receipt, Upload, Eye, Calculator, Package, Wrench, Sparkles, Image as ImageIcon
+  Plus, Trash2, Edit2, Save, X, Search, 
+  Receipt, Upload, Eye, Calculator, Package, ImageIcon, Check
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useTranslation } from 'react-i18next';
 
+// Helper ບີບອັດຮູບໃບບິນ
 const compressImage = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -60,7 +61,7 @@ export default function Suppliers() {
   const [supplierList, setSupplierList] = useState<string[]>(['ລັກຂະນາແພກ', 'LATDA', 'CHANHOM', 'DMART', 'HEAVENLY']);
   const [filter, setFilter] = useState('');
 
-  // Invoice Header State
+  // 1. ຫົວໃບບິນ Batch Bill
   const [billSupplier, setBillSupplier] = useState('ລັກຂະນາແພກ');
   const [billCurrency, setBillCurrency] = useState<'THB' | 'LAK' | 'USD'>('THB');
   const [billExchangeRate, setBillExchangeRate] = useState<number>(680);
@@ -68,7 +69,7 @@ export default function Suppliers() {
   const [billTime, setBillTime] = useState(format(new Date(), 'HH:mm'));
   const [billReceiptImage, setBillReceiptImage] = useState('');
   
-  // Batch Items List
+  // 2. ລາຍການເຄື່ອງໃນບິນ
   const [billItems, setBillItems] = useState<BillItemRow[]>([
     { productId: '', name: '', quantity: 1, quantityPerUnit: 1000, unit: 'g', priceOriginal: '', priceMode: 'total', remark: '' }
   ]);
@@ -76,7 +77,12 @@ export default function Suppliers() {
   const [saveLoading, setSaveLoading] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
-  // 📦 New Product Modal State (ຊື່ສິນຄ້າ, ປະເພດ COGS/ອຸປະກອນ/ດຳເນີນງານ, ຮູບສິນຄ້າ)
+  // 📝 STATE ສຳລັບການແກ້ໄຂລາຍການ (EDIT RECORD)
+  const [editingItem, setEditingItem] = useState<any | null>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editPriceDisplay, setEditPriceDisplay] = useState('');
+
+  // 📦 New Product Modal
   const [isAddProductModalOpen, setIsAddProductModalOpen] = useState(false);
   const [newProductForm, setNewProductForm] = useState({
     name: '',
@@ -87,6 +93,7 @@ export default function Suppliers() {
     productImage: ''
   });
 
+  // In-App Popups (ລຶບ/ແຈ້ງເຕືອນ/ເພີ່ມຮ້ານ)
   const [appModal, setAppModal] = useState<{
     isOpen: boolean;
     title: string;
@@ -108,7 +115,7 @@ export default function Suppliers() {
     return () => { unsubP(); unsubS(); };
   }, []);
 
-  // 📋 ຮອງຮັບ Paste ຮູບ (Ctrl+V) ທັງໃນໃບບິນ ແລະ ໃນຟອມເພີ່ມສິນຄ້າ
+  // Ctrl+V Paste Receipt
   useEffect(() => {
     const handlePaste = async (e: ClipboardEvent) => {
       const items = e.clipboardData?.items;
@@ -118,7 +125,9 @@ export default function Suppliers() {
           const file = items[i].getAsFile();
           if (file) {
             const base64 = await compressImage(file);
-            if (isAddProductModalOpen) {
+            if (isEditModalOpen && editingItem) {
+              setEditingItem((prev: any) => ({ ...prev, receiptImage: base64 }));
+            } else if (isAddProductModalOpen) {
               setNewProductForm(prev => ({ ...prev, productImage: base64 }));
             } else {
               setBillReceiptImage(base64);
@@ -129,7 +138,7 @@ export default function Suppliers() {
     };
     window.addEventListener('paste', handlePaste);
     return () => window.removeEventListener('paste', handlePaste);
-  }, [isAddProductModalOpen]);
+  }, [isEditModalOpen, editingItem, isAddProductModalOpen]);
 
   const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
@@ -167,46 +176,7 @@ export default function Suppliers() {
     };
   }, [billItems, billCurrency, billExchangeRate]);
 
-  // 🚀 ບັນທຶກສິນຄ້າໃໝ່ (Product) ພ້ອມໝວດໝູ່ COGS/ອຸປະກອນ/ດຳເນີນງານ ແລະ ຮູບສິນຄ້າ
-  const handleSaveNewProduct = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newProductForm.name.trim()) return;
-
-    try {
-      const docRef = await addDoc(collection(db, 'products'), {
-        name: newProductForm.name.trim(),
-        categoryType: newProductForm.categoryType, // 'COGS' | 'EQUIPMENT' | 'OPERATIONAL'
-        unit: newProductForm.unit || 'g',
-        packSize: Number(newProductForm.packSize) || 1000,
-        minStock: Number(newProductForm.minStock) || 100,
-        productImage: newProductForm.productImage || '',
-        isDurable: newProductForm.categoryType === 'EQUIPMENT',
-        createdAt: serverTimestamp()
-      });
-
-      // Auto select the new product in the first item row
-      setBillItems(prev => prev.map((it, idx) => idx === 0 ? {
-        ...it,
-        productId: docRef.id,
-        unit: newProductForm.unit,
-        quantityPerUnit: newProductForm.packSize
-      } : it));
-
-      setIsAddProductModalOpen(false);
-      setNewProductForm({
-        name: '',
-        categoryType: 'COGS',
-        unit: 'g',
-        packSize: 1000,
-        minStock: 100,
-        productImage: ''
-      });
-      alert("ເພີ່ມສິນຄ້າໃໝ່ສຳເລັດແລ້ວ!");
-    } catch (e: any) {
-      alert("Error: " + e.message);
-    }
-  };
-
+  // 🚀 ບັນທຶກໃບບິນຊື້ເຄື່ອງທັງໝົດ
   const handleSaveWholeBill = async (e: React.FormEvent) => {
     e.preventDefault();
     const validItems = billItems.filter(it => it.productId && Number(String(it.priceOriginal).replace(/,/g, '')) > 0);
@@ -260,10 +230,102 @@ export default function Suppliers() {
         isOpen: true, 
         title: 'ສຳເລັດ', 
         type: 'alert', 
-        data: `ບັນທຶກສຳເລັດແລ້ວທັງໝົດ ${validItems.length} ລາຍການ! ຍອດລວມ: ${billSummary.grandTotalOriginal.toLocaleString()} ${billCurrency}` 
+        data: `ບັນທຶກສຳເລັດແລ້ວທັງໝົດ ${validItems.length} ລາຍການ!` 
       });
     } finally {
       setSaveLoading(false);
+    }
+  };
+
+  // 📝 ເປີດ Modal ແກ້ໄຂລາຍການ
+  const handleOpenEditModal = (item: any) => {
+    const rawVal = item.priceMode === 'total' 
+      ? (item.totalPriceOriginal || item.priceOriginal * item.quantity)
+      : item.priceOriginal;
+
+    setEditingItem({
+      ...item,
+      priceInput: rawVal,
+      priceMode: item.priceMode || 'total',
+      exchangeRate: item.currency === 'LAK' ? 1 : (item.exchangeRate || 1)
+    });
+    setEditPriceDisplay(Number(rawVal).toLocaleString());
+    setIsEditModalOpen(true);
+  };
+
+  // 💾 ບັນທຶກການແກ້ໄຂລົງ Firestore
+  const handleSaveEditedItem = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingItem) return;
+
+    try {
+      setSaveLoading(true);
+      const rawPrice = Number(String(editingItem.priceInput).replace(/,/g, '')) || 0;
+      const qty = Number(editingItem.quantity) || 1;
+      const rate = editingItem.currency === 'LAK' ? 1 : (Number(editingItem.exchangeRate) || 1);
+
+      const singlePrice = editingItem.priceMode === 'total' ? rawPrice / qty : rawPrice;
+      const priceLAK = singlePrice * rate;
+      const totalOriginal = editingItem.priceMode === 'total' ? rawPrice : rawPrice * qty;
+      const totalPriceLAK = totalOriginal * rate;
+
+      await updateDoc(doc(db, 'supplierPrices', editingItem.id), {
+        productId: editingItem.productId,
+        supplier: editingItem.supplier,
+        currency: editingItem.currency,
+        exchangeRate: rate,
+        priceOriginal: singlePrice,
+        priceLAK,
+        totalPriceOriginal: totalOriginal,
+        totalPriceLAK,
+        quantity: qty,
+        quantityPerUnit: Number(editingItem.quantityPerUnit) || 1,
+        unit: editingItem.unit || 'g',
+        remark: editingItem.remark || '',
+        receiptImage: editingItem.receiptImage || '',
+        date: editingItem.date,
+        time: editingItem.time || '12:00',
+        priceMode: editingItem.priceMode,
+        updatedAt: serverTimestamp()
+      });
+
+      setIsEditModalOpen(false);
+      setEditingItem(null);
+      setAppModal({ isOpen: true, title: 'ສຳເລັດ', type: 'alert', data: 'ປັບປຸງຂໍ້ມູນລາຄາສຳເລັດແລ້ວ!' });
+    } finally {
+      setSaveLoading(false);
+    }
+  };
+
+  // ເພີ່ມສິນຄ້າໃໝ່ (COGS / ອຸປະກອນ / ດຳເນີນງານ)
+  const handleSaveNewProduct = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newProductForm.name.trim()) return;
+
+    try {
+      const docRef = await addDoc(collection(db, 'products'), {
+        name: newProductForm.name.trim(),
+        categoryType: newProductForm.categoryType,
+        unit: newProductForm.unit || 'g',
+        packSize: Number(newProductForm.packSize) || 1000,
+        minStock: Number(newProductForm.minStock) || 100,
+        productImage: newProductForm.productImage || '',
+        isDurable: newProductForm.categoryType === 'EQUIPMENT',
+        createdAt: serverTimestamp()
+      });
+
+      setIsAddProductModalOpen(false);
+      setNewProductForm({
+        name: '',
+        categoryType: 'COGS',
+        unit: 'g',
+        packSize: 1000,
+        minStock: 100,
+        productImage: ''
+      });
+      setAppModal({ isOpen: true, title: 'ສຳເລັດ', type: 'alert', data: 'ເພີ່ມສິນຄ້າໃໝ່ສຳເລັດແລ້ວ!' });
+    } catch (e: any) {
+      alert("Error: " + e.message);
     }
   };
 
@@ -280,11 +342,10 @@ export default function Suppliers() {
             Supplier Quotes & Batch Invoices
           </h1>
           <p className="text-xs text-slate-400 mt-0.5">
-            ບັນທຶກໃບບິນຊື້ເຄື່ອງ ແລະ ຈັດການສິນຄ້າ (COGS, ອຸປະກອນ, ດຳເນີນງານ)
+            ບັນທຶກ, ແກ້ໄຂ ແລະ ລຶບໃບບິນຊື້ເຄື່ອງຈາກ Supplier ພ້ອມຄິດໄລ່ຕົ້ນທຶນຕົວຈິງ
           </p>
         </div>
 
-        {/* ປຸ່ມ "ເພີ່ມສິນຄ້າໃໝ່" */}
         <button
           onClick={() => setIsAddProductModalOpen(true)}
           className="crystal-button !py-2.5 !px-4 flex items-center gap-1.5"
@@ -337,6 +398,9 @@ export default function Suppliers() {
             <div className="space-y-1">
               <div className="flex justify-between items-center">
                 <label className="label-xs">ສະກຸນເງິນ & ເລດ</label>
+                {billCurrency !== 'LAK' && (
+                  <span className="text-[10px] text-amber-500 font-bold">1 {billCurrency} = ... ₭</span>
+                )}
               </div>
               <div className="flex gap-2">
                 <select
@@ -358,7 +422,7 @@ export default function Suppliers() {
                 <input
                   type="number"
                   disabled={billCurrency === 'LAK'}
-                  placeholder="ເລດເງິນ"
+                  placeholder="ເລດ"
                   value={billCurrency === 'LAK' ? 1 : billExchangeRate}
                   onChange={e => setBillExchangeRate(parseFloat(e.target.value) || 1)}
                   className="crystal-input flex-1 font-mono font-bold text-center disabled:opacity-40"
@@ -399,7 +463,7 @@ export default function Suppliers() {
 
           </div>
 
-          {/* ລາຍການສິນຄ້າພາຍໃນໃບບິນ */}
+          {/* ລາຍການສິນຄ້າໃນໃບບິນ */}
           <div className="space-y-3">
             <div className="flex justify-between items-center">
               <h4 className="text-xs font-serif uppercase tracking-wider text-slate-800 dark:text-white">
@@ -426,16 +490,8 @@ export default function Suppliers() {
                         {idx + 1}
                       </span>
 
-                      {/* Product Image & Select */}
-                      <div className="flex-1 flex items-center gap-2">
-                        {prod?.productImage ? (
-                          <img src={prod.productImage} alt={prod.name} className="w-8 h-8 rounded-lg object-cover border border-neutral-700 shrink-0" />
-                        ) : (
-                          <div className="w-8 h-8 rounded-lg bg-neutral-200 dark:bg-neutral-800 flex items-center justify-center text-slate-400 shrink-0">
-                            <Package className="w-4 h-4" />
-                          </div>
-                        )}
-
+                      {/* ເລືອກສິນຄ້າ */}
+                      <div className="flex-1">
                         <select
                           value={item.productId}
                           onChange={e => {
@@ -448,7 +504,7 @@ export default function Suppliers() {
                               quantityPerUnit: pr?.packSize || 1000 
                             } : it));
                           }}
-                          className="crystal-input w-full font-bold !py-2 text-xs"
+                          className="crystal-input w-full font-bold !py-2 text-xs cursor-pointer"
                         >
                           <option value="">-- ເລືອກສິນຄ້າ --</option>
                           {products.map(p => (
@@ -459,7 +515,7 @@ export default function Suppliers() {
                         </select>
                       </div>
 
-                      {/* Mode (Total vs Per pack) */}
+                      {/* ໂໝດລາຄາ (ລວມ vs ຕໍ່ແພັກ) */}
                       <div className="flex bg-slate-200 dark:bg-neutral-800 rounded-xl p-0.5 text-[10px]">
                         <button
                           type="button"
@@ -477,7 +533,7 @@ export default function Suppliers() {
                         </button>
                       </div>
 
-                      {/* Price */}
+                      {/* ຊ່ອງລາຄາ */}
                       <div className="w-40">
                         <div className="relative">
                           <input
@@ -501,7 +557,7 @@ export default function Suppliers() {
                       )}
                     </div>
 
-                    {/* Qty, Pack size, Unit, Remark */}
+                    {/* ຈຳນວນ, ຂະໜາດ/ແພັກ, ຫົວໜ່ວຍ, ໝາຍເຫດ */}
                     <div className="grid grid-cols-4 gap-2 text-xs pt-1">
                       <div>
                         <span className="text-[9px] text-slate-400 block mb-0.5">ຈຳນວນແພັກ/ຖົງ</span>
@@ -592,12 +648,12 @@ export default function Suppliers() {
         </form>
       </div>
 
-      {/* Table */}
+      {/* 📋 ຕາຕະລາງປະຫວັດລາຄາ & ປຸ່ມແກ້ໄຂ / ລຶບ (ໃຊ້ໄອຄອນ Lucide-React 100%) */}
       <div className="high-density-card p-6 overflow-hidden">
         <div className="flex justify-between items-center border-b border-slate-100 dark:border-neutral-800 pb-3 mb-4">
           <div>
             <h3 className="text-sm font-serif text-slate-800 dark:text-white">ປະຫວັດລາຄາ & ໃບບິນທັງໝົດ</h3>
-            <p className="text-xs text-slate-400">ກົດໄອຄອນຕາເພື່ອເບິ່ງຮູບໃບບິນ</p>
+            <p className="text-xs text-slate-400">ສາມາດກົດໄອຄອນສໍເພື່ອແກ້ໄຂ ຫຼື ໄອຄອນຖັງຂີ້ເຫຍື້ອເພື່ອລຶບ</p>
           </div>
           <input
             type="text"
@@ -658,10 +714,25 @@ export default function Suppliers() {
                           </button>
                         ) : <span className="text-slate-500">-</span>}
                       </td>
+
+                      {/* 🛠️ ປຸ່ມແກ້ໄຂ (Edit2) ແລະ ປຸ່ມລຶບ (Trash2) ຈາກ Lucide-React */}
                       <td className="p-3 text-center">
-                        <button onClick={() => setAppModal({ isOpen: true, title: 'ຢືນຢັນການລຶບ', type: 'delete_quote', data: item.id })} className="p-1.5 text-slate-400 hover:text-rose-500 cursor-pointer">
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button 
+                            onClick={() => handleOpenEditModal(item)} 
+                            className="p-1.5 text-slate-400 hover:text-sky-500 hover:bg-sky-500/10 rounded-lg cursor-pointer transition-colors"
+                            title="ແກ້ໄຂລາຍການ"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button 
+                            onClick={() => setAppModal({ isOpen: true, title: 'ຢືນຢັນການລຶບ', type: 'delete_quote', data: item.id })} 
+                            className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 rounded-lg cursor-pointer transition-colors"
+                            title="ລຶບລາຍການ"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -671,21 +742,212 @@ export default function Suppliers() {
         </div>
       </div>
 
-      {/* 📦 MODAL "ເພີ່ມສິນຄ້າໃໝ່" (ເລືອກປະເພດ COGS/ອຸປະກອນ/ດຳເນີນງານ + ຮູບສິນຄ້າ) */}
+      {/* 📝 MODAL ແກ້ໄຂລາຍການ SUPPLIER (IN-APP EDIT DIALOG) */}
+      {isEditModalOpen && editingItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm" onClick={() => setIsEditModalOpen(false)}>
+          <div className="bg-white dark:bg-[#141414] rounded-3xl p-6 border border-slate-200 dark:border-neutral-800 max-w-lg w-full space-y-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center border-b border-slate-100 dark:border-neutral-800 pb-3">
+              <h3 className="text-base font-serif text-slate-800 dark:text-white flex items-center gap-2">
+                <Edit2 className="w-4 h-4 text-sky-500" />
+                <span>ແກ້ໄຂລາຍການລາຄາ Supplier</span>
+              </h3>
+              <button onClick={() => setIsEditModalOpen(false)} className="text-slate-400 hover:text-white p-1">✕</button>
+            </div>
+
+            <form onSubmit={handleSaveEditedItem} className="space-y-4">
+              
+              {/* ສິນຄ້າ */}
+              <div>
+                <label className="label-xs block mb-1">ສິນຄ້າ / ວັດຖຸດິບ</label>
+                <select
+                  value={editingItem.productId}
+                  onChange={e => {
+                    const pId = e.target.value;
+                    const pr = products.find(p => p.id === pId);
+                    setEditingItem({ ...editingItem, productId: pId, unit: pr?.unit || editingItem.unit });
+                  }}
+                  className="crystal-input w-full font-bold cursor-pointer"
+                >
+                  {products.map(p => (
+                    <option key={p.id} value={p.id}>[{p.categoryType || 'COGS'}] {p.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* ຮ້ານຄ້າ & ວັນທີ */}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="label-xs block mb-1">ຮ້ານຄ້າ (Supplier)</label>
+                  <select
+                    value={editingItem.supplier}
+                    onChange={e => setEditingItem({ ...editingItem, supplier: e.target.value })}
+                    className="crystal-input w-full font-bold cursor-pointer"
+                  >
+                    {supplierList.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="label-xs block mb-1">ວັນທີຊື້</label>
+                  <input
+                    type="date"
+                    required
+                    value={editingItem.date}
+                    onChange={e => setEditingItem({ ...editingItem, date: e.target.value })}
+                    className="crystal-input w-full font-mono font-bold"
+                  />
+                </div>
+              </div>
+
+              {/* ໂໝດລາຄາ */}
+              <div className="grid grid-cols-2 gap-1.5 bg-slate-100 dark:bg-neutral-900 p-1 rounded-2xl">
+                <button
+                  type="button"
+                  onClick={() => setEditingItem({ ...editingItem, priceMode: 'total' })}
+                  className={`py-2 text-xs font-bold rounded-xl cursor-pointer ${editingItem.priceMode === 'total' ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950' : 'text-slate-400'}`}
+                >
+                  ລາຄາລວມ
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditingItem({ ...editingItem, priceMode: 'per_pack' })}
+                  className={`py-2 text-xs font-bold rounded-xl cursor-pointer ${editingItem.priceMode === 'per_pack' ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950' : 'text-slate-400'}`}
+                >
+                  ຕໍ່ແພັກ
+                </button>
+              </div>
+
+              {/* ລາຄາ, ສະກຸນເງິນ & ເລດ */}
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="label-xs block mb-1">ລາຄາ</label>
+                  <input
+                    type="text"
+                    required
+                    value={editPriceDisplay}
+                    onChange={e => {
+                      const raw = e.target.value.replace(/,/g, '');
+                      setEditPriceDisplay(raw ? Number(raw).toLocaleString() : '');
+                      setEditingItem({ ...editingItem, priceInput: Number(raw) || 0 });
+                    }}
+                    className="crystal-input w-full font-mono font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="label-xs block mb-1">ສະກຸນເງິນ</label>
+                  <select
+                    value={editingItem.currency}
+                    onChange={e => setEditingItem({ ...editingItem, currency: e.target.value })}
+                    className="crystal-input w-full font-bold cursor-pointer"
+                  >
+                    <option value="THB">THB (฿)</option>
+                    <option value="LAK">LAK (₭)</option>
+                    <option value="USD">USD ($)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="label-xs block mb-1">ເລດເງິນ</label>
+                  <input
+                    type="number"
+                    disabled={editingItem.currency === 'LAK'}
+                    value={editingItem.currency === 'LAK' ? 1 : editingItem.exchangeRate}
+                    onChange={e => setEditingItem({ ...editingItem, exchangeRate: parseFloat(e.target.value) || 1 })}
+                    className="crystal-input w-full font-mono font-bold text-center disabled:opacity-40"
+                  />
+                </div>
+              </div>
+
+              {/* ຈຳນວນແພັກ, ຂະໜາດ, ຫົວໜ່ວຍ */}
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="label-xs block mb-1">ຈຳນວນແພັກ</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={editingItem.quantity}
+                    onChange={e => setEditingItem({ ...editingItem, quantity: parseFloat(e.target.value) || 1 })}
+                    className="crystal-input w-full text-center font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="label-xs block mb-1">ຂະໜາດ/ແພັກ</label>
+                  <input
+                    type="number"
+                    value={editingItem.quantityPerUnit}
+                    onChange={e => setEditingItem({ ...editingItem, quantityPerUnit: parseFloat(e.target.value) || 1 })}
+                    className="crystal-input w-full text-center font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="label-xs block mb-1">ຫົວໜ່ວຍ</label>
+                  <input
+                    type="text"
+                    value={editingItem.unit}
+                    onChange={e => setEditingItem({ ...editingItem, unit: e.target.value })}
+                    className="crystal-input w-full text-center font-bold uppercase"
+                  />
+                </div>
+              </div>
+
+              {/* ຮູບໃບບິນ */}
+              <div>
+                <label className="label-xs flex justify-between mb-1">
+                  <span>ຮູບໃບບິນ (Receipt Attachment)</span>
+                  <span className="text-emerald-500 font-bold text-[9px]">Ctrl+V ວາງໄດ້</span>
+                </label>
+                <div className="border border-dashed border-slate-300 dark:border-neutral-700 rounded-xl p-2 relative flex items-center justify-between">
+                  <input type="file" accept="image/*" onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      const b64 = await compressImage(file);
+                      setEditingItem({ ...editingItem, receiptImage: b64 });
+                    }
+                  }} className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" />
+                  {editingItem.receiptImage ? (
+                    <div className="flex items-center gap-2 w-full justify-between">
+                      <img src={editingItem.receiptImage} alt="Receipt" className="w-8 h-8 rounded-lg object-cover border border-neutral-700" />
+                      <span className="text-[11px] font-bold text-emerald-500 truncate flex-1 pl-1">ຕິດຮູບໃບບິນແລ້ວ ✓</span>
+                      <button type="button" onClick={(e) => { e.stopPropagation(); setEditingItem({ ...editingItem, receiptImage: '' }); }} className="text-rose-500 p-1">✕</button>
+                    </div>
+                  ) : (
+                    <span className="text-xs text-slate-400 mx-auto flex items-center gap-1.5"><Upload className="w-3.5 h-3.5" /> ຄລິກ ຫຼື ວາງຮູບ (Ctrl+V)</span>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <label className="label-xs block mb-1">ໝາຍເຫດ</label>
+                <input
+                  type="text"
+                  value={editingItem.remark || ''}
+                  onChange={e => setEditingItem({ ...editingItem, remark: e.target.value })}
+                  className="crystal-input w-full !text-xs"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-neutral-800">
+                <button type="button" onClick={() => setIsEditModalOpen(false)} className="px-4 py-2 rounded-xl border text-xs font-bold text-slate-400">ຍົກເລີກ</button>
+                <button type="submit" disabled={saveLoading} className="crystal-button">
+                  {saveLoading ? 'Saving...' : 'ບັນທຶກການແກ້ໄຂ'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 📦 Modal ເພີ່ມສິນຄ້າໃໝ່ */}
       {isAddProductModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setIsAddProductModalOpen(false)}>
           <div className="bg-white dark:bg-[#141414] rounded-3xl p-6 border border-slate-200 dark:border-neutral-800 max-w-md w-full space-y-4" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center border-b border-slate-100 dark:border-neutral-800 pb-3">
               <h3 className="text-sm font-serif text-slate-800 dark:text-white flex items-center gap-2">
                 <Package className="w-4 h-4 text-emerald-500" />
-                <span>ເພີ່ມສິນຄ້າໃໝ່ (New Product / Asset)</span>
+                <span>ເພີ່ມສິນຄ້າໃໝ່ (New Product)</span>
               </h3>
               <button onClick={() => setIsAddProductModalOpen(false)} className="text-slate-400 hover:text-white">✕</button>
             </div>
 
             <form onSubmit={handleSaveNewProduct} className="space-y-4">
-              
-              {/* ຊື່ສິນຄ້າ */}
               <div>
                 <label className="label-xs block mb-1">ຊື່ສິນຄ້າ / ວັດຖຸດິບ</label>
                 <input
@@ -698,9 +960,8 @@ export default function Suppliers() {
                 />
               </div>
 
-              {/* 🌟 ເລືອກປະເພດ: COGS, ອຸປະກອນ, ດຳເນີນງານ */}
               <div>
-                <label className="label-xs block mb-1.5">ປະເພດສິນຄ້າ (Product Category)</label>
+                <label className="label-xs block mb-1.5">ປະເພດສິນຄ້າ</label>
                 <div className="grid grid-cols-3 gap-1.5">
                   <button
                     type="button"
@@ -726,7 +987,6 @@ export default function Suppliers() {
                 </div>
               </div>
 
-              {/* ຫົວໜ່ວຍ & ຂະໜາດຕໍ່ແພັກ */}
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="label-xs block mb-1">ຫົວໜ່ວຍ (Unit)</label>
@@ -737,7 +997,7 @@ export default function Suppliers() {
                   >
                     <option value="g">g (ກຣາມ)</option>
                     <option value="ml">ml (ມິນລິລິດ / ຂວດ)</option>
-                    <option value="pcs">pcs (ອັນ/ແກ້ວ/ຖາດ)</option>
+                    <option value="pcs">pcs (ອັນ/ແກ້ວ)</option>
                     <option value="pack">pack (ແພັກ)</option>
                     <option value="box">box (ແກັດ)</option>
                   </select>
@@ -755,38 +1015,7 @@ export default function Suppliers() {
                 </div>
               </div>
 
-              {/* 📸 ອັບໂຫຼດຮູບສິນຄ້າ (File / Drag & Drop / Ctrl+V) */}
-              <div>
-                <label className="label-xs flex justify-between mb-1">
-                  <span>ຮູບພາບສິນຄ້າ (Product Photo)</span>
-                  <span className="text-emerald-500 font-bold text-[9px]">Ctrl+V ວາງໄດ້</span>
-                </label>
-                <div className="border border-dashed border-slate-300 dark:border-neutral-700 rounded-xl p-3 relative flex items-center justify-between">
-                  <input 
-                    type="file" 
-                    accept="image/*" 
-                    onChange={async (e) => {
-                      const file = e.target.files?.[0];
-                      if (file) {
-                        const b64 = await compressImage(file);
-                        setNewProductForm(prev => ({ ...prev, productImage: b64 }));
-                      }
-                    }} 
-                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" 
-                  />
-                  {newProductForm.productImage ? (
-                    <div className="flex items-center gap-2 w-full justify-between">
-                      <img src={newProductForm.productImage} alt="Product" className="w-10 h-10 rounded-lg object-cover border border-neutral-700" />
-                      <span className="text-xs text-emerald-500 font-bold">ອັບໂຫຼດຮູບສິນຄ້າແລ້ວ ✓</span>
-                      <button type="button" onClick={(e) => { e.stopPropagation(); setNewProductForm(prev => ({ ...prev, productImage: '' })); }} className="text-rose-500 p-1">✕</button>
-                    </div>
-                  ) : (
-                    <span className="text-xs text-slate-400 mx-auto flex items-center gap-1.5"><ImageIcon className="w-4 h-4" /> ຄລິກເລືອກຮູບ ຫຼື ກົດ Ctrl+V</span>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2">
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-neutral-800">
                 <button type="button" onClick={() => setIsAddProductModalOpen(false)} className="px-4 py-2 rounded-xl border text-xs font-bold text-slate-400">ຍົກເລີກ</button>
                 <button type="submit" className="crystal-button">ບັນທຶກສິນຄ້າ</button>
               </div>
@@ -805,7 +1034,7 @@ export default function Suppliers() {
         </div>
       )}
 
-      {/* In-App Popups (ບໍ່ໃຊ້ alert browser) */}
+      {/* In-App Popups (ລຶບ/ແຈ້ງເຕືອນ) */}
       {appModal.isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm" onClick={() => setAppModal({ ...appModal, isOpen: false })}>
           <div className="bg-white dark:bg-[#141414] rounded-3xl p-6 border border-slate-200 dark:border-neutral-800 max-w-md w-full space-y-4" onClick={e => e.stopPropagation()}>
@@ -814,6 +1043,23 @@ export default function Suppliers() {
               <div className="space-y-4 text-xs">
                 <p className="text-slate-400">{appModal.data}</p>
                 <button onClick={() => setAppModal({ ...appModal, isOpen: false })} className="crystal-button w-full">ເຂົ້າໃຈແລ້ວ</button>
+              </div>
+            )}
+            {appModal.type === 'delete_quote' && (
+              <div className="space-y-4 text-xs">
+                <p className="text-slate-300">ທ່ານແນ່ໃຈບໍ່ວ່າຕ້ອງການລຶບລາຍການລາຄານີ້ອອກຈາກລະບົບ?</p>
+                <div className="flex gap-2">
+                  <button onClick={() => setAppModal({ ...appModal, isOpen: false })} className="flex-1 py-2.5 rounded-xl border text-slate-400 font-bold">ຍົກເລີກ</button>
+                  <button 
+                    onClick={async () => {
+                      if (appModal.data) await deleteDoc(doc(db, 'supplierPrices', appModal.data));
+                      setAppModal({ ...appModal, isOpen: false });
+                    }} 
+                    className="flex-1 py-2.5 rounded-xl bg-rose-600 text-white font-bold"
+                  >
+                    ລຶບທັນທີ
+                  </button>
+                </div>
               </div>
             )}
             {appModal.type === 'add_supplier' && (
