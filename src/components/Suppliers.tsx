@@ -12,7 +12,7 @@ import {
 import { format } from 'date-fns';
 import { useTranslation } from 'react-i18next';
 
-// Helper ບີບອັດຮູບໃບບິນ ແລະ ຮູບສິນຄ້າ
+// Helper ບີບອັດຮູບໃບບິນ ແລະ ຮູບສິນຄ້າ (ແກ້ໄຂ async/await ຖືກຕ້ອງ 100%)
 const compressImage = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -110,16 +110,15 @@ export default function Suppliers() {
   useEffect(() => {
     const unsubP = onSnapshot(query(collection(db, 'products'), orderBy('name')), snap => {
       setProducts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
+    }, err => handleFirestoreError(err, OperationType.LIST, 'products'));
 
     const unsubS = onSnapshot(query(collection(db, 'supplierPrices'), orderBy('createdAt', 'desc')), snap => {
       setSupplierPrices(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
+    }, err => handleFirestoreError(err, OperationType.LIST, 'supplierPrices'));
 
     // 🌟 Listen to Real Firestore `suppliers` Collection
     const unsubSuppliers = onSnapshot(query(collection(db, 'suppliers'), orderBy('name')), async snap => {
       if (snap.empty) {
-        // Auto-seed initial default suppliers if collection is empty
         const defaults = ['ລັກຂະນາແພກ', 'Makro', 'LATDA', 'CHANHOM', 'DMART', 'HEAVENLY'];
         for (const name of defaults) {
           await addDoc(collection(db, 'suppliers'), { name, createdAt: serverTimestamp() });
@@ -136,7 +135,7 @@ export default function Suppliers() {
     return () => { unsubP(); unsubS(); unsubSuppliers(); };
   }, []);
 
-  // 📋 Clipboard Paste (Ctrl+V)
+  // 📋 Clipboard Paste (Ctrl+V) ພ້ອມແກ້ໄຂ Async Handling
   useEffect(() => {
     const handlePaste = async (e: ClipboardEvent) => {
       const items = e.clipboardData?.items;
@@ -145,15 +144,15 @@ export default function Suppliers() {
         if (items[i].type.indexOf('image') !== -1) {
           const file = items[i].getAsFile();
           if (file) {
-            const base64 = await compressImage(file);
+            const b64 = await compressImage(file);
             if (isEditModalOpen && editingItem) {
-              setEditingItem((prev: any) => ({ ...prev, productImage: base64 }));
+              setEditingItem((prev: any) => ({ ...prev, productImage: b64 }));
             } else if (isAddProductModalOpen) {
-              setNewProductForm(prev => ({ ...prev, productImage: base64 }));
+              setNewProductForm(prev => ({ ...prev, productImage: b64 }));
             } else if (isProductManagerOpen && editingProduct) {
-              setEditingProduct((prev: any) => ({ ...prev, productImage: base64 }));
+              setEditingProduct((prev: any) => ({ ...prev, productImage: b64 }));
             } else {
-              setBillReceiptImage(base64);
+              setBillReceiptImage(b64);
             }
           }
         }
@@ -167,8 +166,8 @@ export default function Suppliers() {
     e.preventDefault();
     const files = e.dataTransfer.files;
     if (files.length > 0 && files[0].type.startsWith('image/')) {
-      const base64 = await compressImage(files[0]);
-      setBillReceiptImage(base64);
+      const b64 = await compressImage(files[0]);
+      setBillReceiptImage(b64);
     }
   };
 
@@ -260,7 +259,7 @@ export default function Suppliers() {
     }
   };
 
-  // 🏪 ຈັດການຮ້ານຄ້າ: ແກ້ໄຂຊື່ຮ້ານຄ້າທີ່ສະກົດຜິດ (ພ້ອມປ່ຽນຊື່ໃນໃບບິນເກົ່າອັດຕະໂນມັດ)
+  // 🏪 ຈັດການຮ້ານຄ້າ: ແກ້ໄຂຊື່ຮ້ານຄ້າທີ່ສະກົດຜິດ
   const handleUpdateSupplierName = async (supplierId: string, oldName: string) => {
     if (!editSupplierName.trim() || editSupplierName.trim() === oldName) {
       setEditingSupplierId(null);
@@ -269,10 +268,7 @@ export default function Suppliers() {
 
     const newName = editSupplierName.trim();
     try {
-      // 1. Update in Firestore `suppliers` collection
       await updateDoc(doc(db, 'suppliers', supplierId), { name: newName });
-
-      // 2. Auto batch update in historical `supplierPrices` so old records reflect the fix!
       const q = query(collection(db, 'supplierPrices'), where('supplier', '==', oldName));
       const snap = await getDocs(q);
       const updates = snap.docs.map(d => updateDoc(doc(db, 'supplierPrices', d.id), { supplier: newName }));
@@ -289,7 +285,7 @@ export default function Suppliers() {
   const handleAddNewSupplierToFirestore = async () => {
     if (!newSupplierInput.trim()) return;
     try {
-      const docRef = await addDoc(collection(db, 'suppliers'), {
+      await addDoc(collection(db, 'suppliers'), {
         name: newSupplierInput.trim(),
         createdAt: serverTimestamp()
       });
@@ -316,7 +312,7 @@ export default function Suppliers() {
     try {
       await updateDoc(doc(db, 'products', editingProduct.id), {
         name: editingProduct.name.trim(),
-        categoryType: editingProduct.categoryType, // 🌟 'COGS' | 'EQUIPMENT' | 'OPERATIONAL'
+        categoryType: editingProduct.categoryType,
         unit: editingProduct.unit || 'g',
         packSize: Number(editingProduct.packSize) || 1000,
         isDurable: editingProduct.categoryType === 'EQUIPMENT',
@@ -384,7 +380,6 @@ export default function Suppliers() {
         updatedAt: serverTimestamp()
       });
 
-      // Update product image and categoryType if changed
       if (editingItem.productId) {
         await updateDoc(doc(db, 'products', editingItem.productId), {
           productImage: editingItem.productImage || '',
@@ -420,7 +415,6 @@ export default function Suppliers() {
         createdAt: serverTimestamp()
       });
 
-      // Auto assign into current active row
       setBillItems(prev => prev.map((it, idx) => idx === 0 ? {
         ...it,
         productId: docRef.id,
@@ -460,7 +454,6 @@ export default function Suppliers() {
           </p>
         </div>
 
-        {/* 🛠️ Action Buttons: ຈັດການສິນຄ້າ, ຈັດການຮ້ານຄ້າ, ເພີ່ມສິນຄ້າ (ບໍ່ມີ ++ ແລ້ວ) */}
         <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => setIsSupplierManagerOpen(true)}
@@ -488,11 +481,10 @@ export default function Suppliers() {
         </div>
       </div>
 
-      {/* 🧾 Form: Batch Bill Entry (ປັບ Layout ໃໝ່ສະອາດຕາ ບໍ່ຊ້ອນທັບກັນ) */}
+      {/* 🧾 Form: Batch Bill Entry */}
       <div className="high-density-card p-6 space-y-6">
         <form onSubmit={handleSaveWholeBill} className="space-y-6">
           
-          {/* Header Row: Supplier, Date, Currency, Exchange Rate, Receipt Upload */}
           <div className="grid grid-cols-1 md:grid-cols-12 gap-4 border-b border-slate-100 dark:border-neutral-800 pb-6">
             
             {/* 1. ຮ້ານຄ້າ (4 cols) */}
@@ -564,7 +556,7 @@ export default function Suppliers() {
               </div>
             </div>
 
-            {/* 4. 📸 ຮູບໃບບິນ (3 cols) - ມີປຸ່ມຄລິກຊູມເບິ່ງຮູບໃຫຍ່ໄດ້ */}
+            {/* 4. 📸 ຮູບໃບບິນ (3 cols) */}
             <div className="md:col-span-3 space-y-1">
               <label className="label-xs flex justify-between">
                 <span>ຮູບໃບບິນ (Receipt Image)</span>
@@ -576,14 +568,21 @@ export default function Suppliers() {
                 onDrop={handleDrop}
                 className="border border-dashed border-slate-300 dark:border-neutral-700 rounded-xl p-2 text-center hover:bg-slate-50 dark:hover:bg-neutral-800/40 relative cursor-pointer flex items-center justify-between"
               >
-                <input type="file" accept="image/*" onChange={async (e) => {
-                  const file = e.target.files?.[0];
-                  if (file) setBillReceiptImage(await compressImage(file));
-                }} className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" />
+                <input 
+                  type="file" 
+                  accept="image/*" 
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      const b64 = await compressImage(file);
+                      setBillReceiptImage(b64);
+                    }
+                  }} 
+                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" 
+                />
                 
                 {billReceiptImage ? (
                   <div className="flex items-center gap-2 text-left w-full justify-between">
-                    {/* ຄລິກທີ່ຮູບເພື່ອເບິ່ງຮູບໃຫຍ່ (Zoom) */}
                     <div 
                       onClick={(e) => { e.stopPropagation(); setPreviewImage(billReceiptImage); }}
                       className="relative group/thumb cursor-pointer"
@@ -617,7 +616,7 @@ export default function Suppliers() {
 
           </div>
 
-          {/* 📦 ລາຍການສິນຄ້າໃນໃບບິນ (ຈັດ Layout ງາມຕາ ບໍ່ຊ້ອນທັບກັນ) */}
+          {/* 📦 ລາຍການສິນຄ້າໃນໃບບິນ */}
           <div className="space-y-3">
             <div className="flex justify-between items-center">
               <h4 className="text-xs font-serif uppercase tracking-wider text-slate-800 dark:text-white">
@@ -640,19 +639,18 @@ export default function Suppliers() {
                 return (
                   <div key={idx} className="p-4 rounded-2xl bg-slate-50 dark:bg-[#1a1a1a] border border-slate-200/70 dark:border-neutral-800 space-y-3">
                     
-                    {/* ແຖວເທິງ: ລຳດັບ, ຮູບ, Dropdown ສິນຄ້າ, ໂໝດລາຄາ, ແລະ ຊ່ອງລາຄາ (ແກ້ໄຂ THB THB ທີ່ຊ້ຳແລ້ວ) */}
                     <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
                       <span className="w-6 h-6 rounded-full bg-slate-200 dark:bg-neutral-800 text-[10px] font-bold flex items-center justify-center font-mono shrink-0">
                         {idx + 1}
                       </span>
 
-                      {/* ຮູບສິນຄ້າ (ຄລິກເບິ່ງຮູບໃຫຍ່ໄດ້) */}
+                      {/* ຮູບສິນຄ້າ */}
                       <div className="shrink-0">
                         {prod?.productImage ? (
                           <div 
                             onClick={() => setPreviewImage(prod.productImage)}
                             className="relative group/pimg cursor-pointer"
-                            title="ກົດເພື່ອເບິ່ງຮູບສິນຄ້າໃຫຍ່"
+                            title="ກົດເພື່ອເບິ່ງຮູບໃຫຍ່"
                           >
                             <img src={prod.productImage} alt={prod.name} className="w-9 h-9 rounded-xl object-cover border border-neutral-700" />
                             <div className="absolute inset-0 bg-black/40 rounded-xl flex items-center justify-center opacity-0 group-hover/pimg:opacity-100 transition-opacity">
@@ -691,7 +689,7 @@ export default function Suppliers() {
                         </select>
                       </div>
 
-                      {/* ໂໝດລາຄາ (ລວມ vs ຕໍ່ແພັກ) */}
+                      {/* ໂໝດລາຄາ */}
                       <div className="flex bg-slate-200 dark:bg-neutral-800 rounded-xl p-0.5 text-[10px] shrink-0 self-center">
                         <button
                           type="button"
@@ -709,7 +707,7 @@ export default function Suppliers() {
                         </button>
                       </div>
 
-                      {/* ຊ່ອງໃສ່ລາຄາ (ແກ້ໄຂ THB THB ຊ້ອນກັນແລ້ວ) */}
+                      {/* ຊ່ອງໃສ່ລາຄາ */}
                       <div className="w-full sm:w-44 shrink-0">
                         <div className="relative">
                           <input
@@ -735,7 +733,7 @@ export default function Suppliers() {
                       )}
                     </div>
 
-                    {/* ແຖວລຸ່ມ: 4 ຊ່ອງຂະໜານກັນງາມໆ (ຈຳນວນແພັກ, ຂະໜາດ/ແພັກ, ຫົວໜ່ວຍ, ໝາຍເຫດ) */}
+                    {/* 4 ຊ່ອງຂະໜານກັນ */}
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs pt-1 border-t border-slate-200/60 dark:border-neutral-800/60">
                       <div>
                         <label className="text-[9px] font-bold text-slate-400 block mb-1">ຈຳນວນແພັກ/ຖົງ</label>
@@ -829,7 +827,7 @@ export default function Suppliers() {
         </form>
       </div>
 
-      {/* 📋 ຕາຕະລາງປະຫວັດລາຄາ & ຮູບພາບ (ຄລິກຊູມເບິ່ງຮູບໃຫຍ່ໄດ້ທັງໝົດ) */}
+      {/* 📋 ຕາຕະລາງປະຫວັດລາຄາ & ຮູບພາບ */}
       <div className="high-density-card p-6 overflow-hidden">
         <div className="flex justify-between items-center border-b border-slate-100 dark:border-neutral-800 pb-3 mb-4">
           <div>
@@ -872,7 +870,6 @@ export default function Suppliers() {
                       <td className="p-3 font-mono text-slate-400">{item.date}</td>
                       <td className="p-3 font-bold text-slate-800 dark:text-white">
                         <div className="flex items-center gap-2.5">
-                          {/* 🖼️ ຮູບສິນຄ້າ (ກົດເພື່ອຊູມເບິ່ງຮູບໃຫຍ່) */}
                           {prod?.productImage ? (
                             <div 
                               onClick={() => setPreviewImage(prod.productImage)}
@@ -904,7 +901,6 @@ export default function Suppliers() {
                         {Math.round(total).toLocaleString()} ₭
                       </td>
                       
-                      {/* 📸 ໃບບິນ (ກົດເພື່ອຊູມເບິ່ງຮູບໃຫຍ່) */}
                       <td className="p-3 text-center">
                         {item.receiptImage ? (
                           <button 
@@ -917,7 +913,6 @@ export default function Suppliers() {
                         ) : <span className="text-slate-500">-</span>}
                       </td>
 
-                      {/* 🛠️ ປຸ່ມແກ້ໄຂ ແລະ ລຶບ */}
                       <td className="p-3 text-center">
                         <div className="flex items-center justify-center gap-1.5">
                           <button 
@@ -944,7 +939,7 @@ export default function Suppliers() {
         </div>
       </div>
 
-      {/* 🏪 MODAL ຈັດການຮ້ານຄ້າ (MANAGE SUPPLIERS) - ແກ້ໄຂຊື່ຮ້ານຄ້າທີ່ສະກົດຜິດໃນ FIRESTORE! */}
+      {/* 🏪 MODAL ຈັດການຮ້ານຄ້າ */}
       {isSupplierManagerOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm" onClick={() => setIsSupplierManagerOpen(false)}>
           <div className="bg-white dark:bg-[#141414] rounded-3xl p-6 border border-slate-200 dark:border-neutral-800 max-w-md w-full space-y-4 max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
@@ -961,7 +956,6 @@ export default function Suppliers() {
               <button onClick={() => setIsSupplierManagerOpen(false)} className="text-slate-400 hover:text-white p-1">✕</button>
             </div>
 
-            {/* ເພີ່ມຮ້ານໃໝ່ */}
             <div className="space-y-1.5">
               <label className="label-xs">ເພີ່ມຮ້ານຄ້າໃໝ່ເຂົ້າ Firestore</label>
               <div className="flex gap-2">
@@ -982,7 +976,6 @@ export default function Suppliers() {
               </div>
             </div>
 
-            {/* ລາຍຊື່ຮ້ານຄ້າທີ່ມີຢູ່ ພ້ອມປຸ່ມແກ້ໄຂຊື່ */}
             <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-neutral-800">
               <label className="label-xs block">ລາຍຊື່ຮ້ານຄ້າໃນລະບົບ ({firestoreSuppliers.length} ຮ້ານ)</label>
               <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
@@ -1043,7 +1036,7 @@ export default function Suppliers() {
         </div>
       )}
 
-      {/* 📦 MODAL ຈັດການສິນຄ້າ: ປ່ຽນປະເພດ COGS ➔ CAPEX (ອຸປະກອນ) ➔ OPEX (ດຳເນີນງານ) */}
+      {/* 📦 MODAL ຈັດການສິນຄ້າ: ປ່ຽນປະເພດ COGS ➔ CAPEX ➔ OPEX */}
       {isProductManagerOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm" onClick={() => setIsProductManagerOpen(false)}>
           <div className="bg-white dark:bg-[#141414] rounded-3xl p-6 border border-slate-200 dark:border-neutral-800 max-w-xl w-full space-y-4 max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
@@ -1061,7 +1054,6 @@ export default function Suppliers() {
             </div>
 
             {editingProduct ? (
-              /* ຟອມແກ້ໄຂສິນຄ້າ */
               <div className="p-4 rounded-2xl bg-slate-50 dark:bg-[#1a1a1a] border border-slate-200/70 dark:border-neutral-800 space-y-4">
                 <h4 className="text-xs font-bold text-slate-700 dark:text-neutral-200">ກຳລັງແກ້ໄຂສິນຄ້າ: {editingProduct.name}</h4>
                 
@@ -1075,7 +1067,6 @@ export default function Suppliers() {
                   />
                 </div>
 
-                {/* 🌟 ປ່ຽນປະເພດສິນຄ້າ COGS / ອຸປະກອນ / ດຳເນີນງານ */}
                 <div>
                   <label className="label-xs block mb-1.5">ປ່ຽນໝວດໝູ່ສິນຄ້າ</label>
                   <div className="grid grid-cols-3 gap-2">
@@ -1124,16 +1115,24 @@ export default function Suppliers() {
                   </div>
                 </div>
 
-                {/* ຮູບສິນຄ້າ */}
+                {/* ຮູບສິນຄ້າ (ແກ້ໄຂ async/await ແລ້ວ) */}
                 <div>
                   <label className="label-xs flex justify-between mb-1">
                     <span>ຮູບສິນຄ້າ (Ctrl+V ວາງໄດ້)</span>
                   </label>
                   <div className="border border-dashed border-slate-300 dark:border-neutral-700 rounded-xl p-2 relative flex items-center justify-between">
-                    <input type="file" accept="image/*" onChange={async (e) => {
-                      const file = e.target.files?.[0];
-                      if (file) setEditingProduct({ ...editingProduct, productImage: await compressImage(file) });
-                    }} className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" />
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const b64 = await compressImage(file);
+                          setEditingProduct((prev: any) => ({ ...prev, productImage: b64 }));
+                        }
+                      }} 
+                      className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" 
+                    />
                     {editingProduct.productImage ? (
                       <div className="flex items-center gap-2 w-full justify-between">
                         <img src={editingProduct.productImage} alt="Product" className="w-8 h-8 rounded-lg object-cover border border-neutral-700" />
@@ -1152,7 +1151,6 @@ export default function Suppliers() {
                 </div>
               </div>
             ) : (
-              /* ລາຍຊື່ສິນຄ້າທັງໝົດ */
               <div className="space-y-2">
                 <label className="label-xs block">ລາຍການສິນຄ້າໃນລະບົບ ({products.length} ລາຍການ)</label>
                 <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
@@ -1168,9 +1166,7 @@ export default function Suppliers() {
                         )}
                         <div className="min-w-0">
                           <span className="text-xs font-bold text-slate-800 dark:text-white block truncate">{p.name}</span>
-                          <span className="text-[10px] text-slate-400 font-mono">
-                            {p.packSize}{p.unit}
-                          </span>
+                          <span className="text-[10px] text-slate-400 font-mono">{p.packSize}{p.unit}</span>
                         </div>
                       </div>
 
@@ -1201,7 +1197,7 @@ export default function Suppliers() {
         </div>
       )}
 
-      {/* 🔍 MODAL LIGHTBOX: ເບິ່ງຮູບຂະໜາດໃຫຍ່ (ZOOM IMAGE VIEW) */}
+      {/* 🔍 MODAL LIGHTBOX: ເບິ່ງຮູບໃຫຍ່ (ZOOM VIEW) */}
       {previewImage && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md" onClick={() => setPreviewImage(null)}>
           <div className="relative max-w-2xl max-h-[90vh] bg-[#141414] rounded-3xl p-3 border border-neutral-800" onClick={e => e.stopPropagation()}>
@@ -1213,7 +1209,7 @@ export default function Suppliers() {
         </div>
       )}
 
-      {/* 📝 MODAL ແກ້ໄຂລາຍການລາຄາ */}
+      {/* 📝 MODAL ແກ້ໄຂລາຍການລາຄາ (ແກ້ໄຂ async/await ສຳເລັດແລ້ວ) */}
       {isEditModalOpen && editingItem && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm" onClick={() => setIsEditModalOpen(false)}>
           <div className="bg-white dark:bg-[#141414] rounded-3xl p-6 border border-slate-200 dark:border-neutral-800 max-w-lg w-full space-y-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
@@ -1254,7 +1250,7 @@ export default function Suppliers() {
                 </select>
               </div>
 
-              {/* 🌟 ປ່ຽນປະເພດສິນຄ້າໃນ Modal ແກ້ໄຂ */}
+              {/* ປ່ຽນປະເພດສິນຄ້າ */}
               <div>
                 <label className="label-xs block mb-1">ປະເພດສິນຄ້າ (Product Category)</label>
                 <div className="grid grid-cols-3 gap-1.5">
@@ -1282,17 +1278,25 @@ export default function Suppliers() {
                 </div>
               </div>
 
-              {/* ຮູບສິນຄ້າ */}
+              {/* ຮູບສິນຄ້າ (ແກ້ໄຂ async/await ແລ້ວ) */}
               <div className="p-3.5 rounded-2xl bg-sky-500/10 border border-sky-500/20 space-y-1.5">
                 <label className="label-xs !text-sky-500 flex justify-between">
                   <span>ຮູບພາບສິນຄ້າຕົວຈິງ (Product Photo)</span>
                   <span className="font-bold text-[9px]">Ctrl+V</span>
                 </label>
                 <div className="border border-dashed border-sky-500/30 rounded-xl p-2.5 relative flex items-center justify-between">
-                  <input type="file" accept="image/*" onChange={async (e) => {
-                    const file = e.target.files?.[0];
-                    if (file) setEditingItem((prev: any) => ({ ...prev, productImage: await compressImage(file) }));
-                  }} className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" />
+                  <input 
+                    type="file" 
+                    accept="image/*" 
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const b64 = await compressImage(file);
+                        setEditingItem((prev: any) => ({ ...prev, productImage: b64 }));
+                      }
+                    }} 
+                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" 
+                  />
                   
                   {editingItem.productImage ? (
                     <div className="flex items-center gap-3 w-full justify-between">
@@ -1404,27 +1408,45 @@ export default function Suppliers() {
                 </div>
               </div>
 
-              {/* ຮູບໃບບິນ */}
+              {/* ຮູບໃບບິນ (ແກ້ໄຂ async/await ແລ້ວ) */}
               <div>
                 <label className="label-xs flex justify-between mb-1">
                   <span>ຮູບໃບບິນ (Receipt Attachment)</span>
                   <span className="text-emerald-500 font-bold text-[9px]">Ctrl+V</span>
                 </label>
                 <div className="border border-dashed border-slate-300 dark:border-neutral-700 rounded-xl p-2 relative flex items-center justify-between">
-                  <input type="file" accept="image/*" onChange={async (e) => {
-                    const file = e.target.files?.[0];
-                    if (file) setEditingItem({ ...editingItem, receiptImage: await compressImage(file) });
-                  }} className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" />
+                  <input 
+                    type="file" 
+                    accept="image/*" 
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const b64 = await compressImage(file);
+                        setEditingItem((prev: any) => ({ ...prev, receiptImage: b64 }));
+                      }
+                    }} 
+                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" 
+                  />
                   {editingItem.receiptImage ? (
                     <div className="flex items-center gap-2 w-full justify-between">
                       <img src={editingItem.receiptImage} alt="Receipt" className="w-8 h-8 rounded-lg object-cover border border-neutral-700" />
                       <span className="text-[11px] font-bold text-emerald-500 truncate flex-1 pl-1">ຕິດຮູບໃບບິນແລ້ວ ✓</span>
-                      <button type="button" onClick={() => setEditingItem({ ...editingItem, receiptImage: '' })} className="text-rose-500 p-1">✕</button>
+                      <button type="button" onClick={() => setEditingItem((prev: any) => ({ ...prev, receiptImage: '' }))} className="text-rose-500 p-1">✕</button>
                     </div>
                   ) : (
                     <span className="text-xs text-slate-400 mx-auto flex items-center gap-1.5"><Upload className="w-3.5 h-3.5" /> ຄລິກ ຫຼື ວາງຮູບໃບບິນ</span>
                   )}
                 </div>
+              </div>
+
+              <div>
+                <label className="label-xs block mb-1">ໝາຍເຫດ</label>
+                <input
+                  type="text"
+                  value={editingItem.remark || ''}
+                  onChange={e => setEditingItem({ ...editingItem, remark: e.target.value })}
+                  className="crystal-input w-full !text-xs"
+                />
               </div>
 
               <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-neutral-800">
@@ -1438,7 +1460,7 @@ export default function Suppliers() {
         </div>
       )}
 
-      {/* 📦 Modal ເພີ່ມສິນຄ້າໃໝ່ */}
+      {/* 📦 Modal ເພີ່ມສິນຄ້າໃໝ່ (ແກ້ໄຂ async/await ແລ້ວ) */}
       {isAddProductModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setIsAddProductModalOpen(false)}>
           <div className="bg-white dark:bg-[#141414] rounded-3xl p-6 border border-slate-200 dark:border-neutral-800 max-w-md w-full space-y-4" onClick={e => e.stopPropagation()}>
@@ -1518,6 +1540,7 @@ export default function Suppliers() {
                 </div>
               </div>
 
+              {/* ຮູບພາບສິນຄ້າ */}
               <div>
                 <label className="label-xs flex justify-between mb-1">
                   <span>ຮູບພາບສິນຄ້າ (Product Photo)</span>
@@ -1529,7 +1552,10 @@ export default function Suppliers() {
                     accept="image/*" 
                     onChange={async (e) => {
                       const file = e.target.files?.[0];
-                      if (file) setNewProductForm(prev => ({ ...prev, productImage: await compressImage(file) }));
+                      if (file) {
+                        const b64 = await compressImage(file);
+                        setNewProductForm(prev => ({ ...prev, productImage: b64 }));
+                      }
                     }} 
                     className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" 
                   />
@@ -1554,7 +1580,7 @@ export default function Suppliers() {
         </div>
       )}
 
-      {/* 💬 In-App Popups (ລຶບ/ແຈ້ງເຕືອນ) */}
+      {/* 💬 In-App Popups */}
       {appModal.isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm" onClick={() => setAppModal({ ...appModal, isOpen: false })}>
           <div className="bg-white dark:bg-[#141414] rounded-3xl p-6 border border-slate-200 dark:border-neutral-800 max-w-md w-full space-y-4" onClick={e => e.stopPropagation()}>
