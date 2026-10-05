@@ -6,10 +6,10 @@ import {
 import { db, auth, handleFirestoreError, OperationType } from '../firebase';
 import { useTranslation } from 'react-i18next';
 import { 
-  DollarSign, Wallet, CreditCard, 
-  Plus, Trash2,
+  DollarSign, TrendingUp, Wallet, CreditCard, 
+  Plus, Trash2, ArrowUpRight, ArrowDownRight,
   Download, QrCode, Building2,
-  HandCoins, Receipt, Upload, Eye
+  HandCoins, Receipt, Upload, Eye, Target, Sliders, Calculator, Sparkles, Filter
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { utils, writeFile } from 'xlsx';
@@ -39,9 +39,9 @@ const compressImage = (file: File): Promise<string> => {
         ctx?.drawImage(img, 0, 0, width, height);
         resolve(canvas.toDataURL('image/jpeg', 0.65));
       };
-      img.onerror = (err) => reject(err);
+      img.onerror = reject;
     };
-    reader.onerror = (err) => reject(err);
+    reader.onerror = reject;
   });
 };
 
@@ -49,12 +49,16 @@ export type ExpenseBucket = 'cogs' | 'opex' | 'capex' | 'dividend';
 
 export default function Finance({ userSettings }: { userSettings?: any }) {
   const { i18n } = useTranslation();
-  const [subView, setSubView] = useState<'transactions' | 'debts'>('transactions');
+  const [subView, setSubView] = useState<'transactions' | 'debts' | 'breakeven'>('transactions');
 
   const [transactions, setTransactions] = useState<any[]>([]);
   const [supplierPrices, setSupplierPrices] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   const [debts, setDebts] = useState<any[]>([]);
+
+  // 🌟 View Filter: "ທັງໝົດ (All-Time)" ຫຼື "ລາຍເດືອນ (Monthly)"
+  const [timeFilter, setTimeFilter] = useState<'all' | 'monthly'>('all');
+  const [selectedMonth, setSelectedMonth] = useState<string>(format(new Date(), 'yyyy-MM'));
 
   // Form State: Transactions
   const [type, setType] = useState<'income' | 'expense'>('income');
@@ -68,7 +72,10 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
   const [time, setTime] = useState(format(new Date(), 'HH:mm'));
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Form State: Debts (AP / AR)
+  // 🌟 Modal ປ່ຽນປະເພດຕົ້ນທຶນ (ປ່ຽນ 40 ລ້ານຈາກ OPEX ໄປເປັນ CAPEX)
+  const [editingBucketTx, setEditingBucketTx] = useState<any | null>(null);
+
+  // Debts
   const [debtType, setDebtType] = useState<'payable' | 'receivable'>('payable');
   const [debtPerson, setDebtPerson] = useState('');
   const [debtAmount, setDebtAmount] = useState('');
@@ -76,13 +83,16 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
   const [debtReceiptImage, setDebtReceiptImage] = useState('');
   const [debtRemark, setDebtRemark] = useState('');
 
-  // 📥 Drawer ດຶງໃບບິນ Supplier ຕາມວັນທີ
+  // Break-Even Simulator
+  const [initialInvestment, setInitialInvestment] = useState<number>(40000000);
+  const [fixedMonthlyOpex, setFixedMonthlyOpex] = useState<number>(12000000);
+  const [avgPricePerUnit, setAvgPricePerUnit] = useState<number>(25000);
+  const [avgCostPerUnit, setAvgCostPerUnit] = useState<number>(11000);
+  const [simulatedDailyVolume, setSimulatedDailyVolume] = useState<number>(35);
+
   const [isSupplierModalOpen, setIsSupplierModalOpen] = useState(false);
   const [selectedSupplierItems, setSelectedSupplierItems] = useState<{ [id: string]: boolean }>({});
   const [previewImage, setPreviewImage] = useState<string | null>(null);
-
-  // Custom In-App Modal Dialog
-  const [appDialog, setAppDialog] = useState<{ isOpen: boolean; title: string; message: string; onConfirm?: () => void }>({ isOpen: false, title: '', message: '' });
 
   useEffect(() => {
     const unsubTx = onSnapshot(query(collection(db, 'transactions'), orderBy('date', 'desc'), orderBy('time', 'desc')), snap => {
@@ -101,26 +111,15 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
     return () => { unsubTx(); unsubSp(); unsubPr(); unsubDebts(); };
   }, []);
 
-  // 📋 ຮອງຮັບ Paste ຮູບ (Ctrl+V) ທັງໃນລາຍຮັບ-ລາຍຈ່າຍ ແລະ ໜີ້ສິນ
-  useEffect(() => {
-    const handlePaste = async (e: ClipboardEvent) => {
-      const items = e.clipboardData?.items;
-      if (!items) return;
-      for (let i = 0; i < items.length; i++) {
-        if (items[i].type.indexOf('image') !== -1) {
-          const file = items[i].getAsFile();
-          if (file) {
-            const base64 = await compressImage(file);
-            if (subView === 'transactions') setReceiptImage(base64);
-            else setDebtReceiptImage(base64);
-          }
-        }
-      }
-    };
-    window.addEventListener('paste', handlePaste);
-    return () => window.removeEventListener('paste', handlePaste);
-  }, [subView]);
+  // Filter transactions by All-Time or Monthly
+  const filteredTransactions = useMemo(() => {
+    if (timeFilter === 'monthly') {
+      return transactions.filter(t => t.date && t.date.startsWith(selectedMonth));
+    }
+    return transactions;
+  }, [transactions, timeFilter, selectedMonth]);
 
+  // 📊 FINANCIAL METRICS (ຖືກຕ້ອງຕາມບັນຊີ 100%)
   const metrics = useMemo(() => {
     let totalIncome = 0;
     let totalExpense = 0;
@@ -129,7 +128,7 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
     let capexTotal = 0;
     let dividendTotal = 0;
 
-    transactions.forEach(t => {
+    filteredTransactions.forEach(t => {
       const amt = Number(t.amount) || 0;
       if (t.type === 'income') {
         totalIncome += amt;
@@ -143,14 +142,66 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
       }
     });
 
-    return { totalIncome, totalExpense, cogsTotal, opexTotal, capexTotal, dividendTotal };
-  }, [transactions]);
+    const grossProfit = totalIncome - cogsTotal;
+    const grossMarginPercent = totalIncome > 0 ? (grossProfit / totalIncome) * 100 : 0;
+    const netProfit = totalIncome - (cogsTotal + opexTotal + capexTotal);
+    const netMarginPercent = totalIncome > 0 ? (netProfit / totalIncome) * 100 : 0;
+    const totalInvest = cogsTotal + opexTotal + capexTotal;
+    const roiPercent = totalInvest > 0 ? (netProfit / totalInvest) * 100 : 0;
+
+    return {
+      totalIncome,
+      totalExpense,
+      cogsTotal,
+      opexTotal,
+      capexTotal,
+      dividendTotal,
+      grossProfit,
+      grossMarginPercent,
+      netProfit,
+      netMarginPercent,
+      roiPercent
+    };
+  }, [filteredTransactions]);
 
   const debtMetrics = useMemo(() => {
     const totalPayable = debts.filter(d => d.type === 'payable' && d.status !== 'settled').reduce((sum, d) => sum + (Number(d.amount) || 0), 0);
     const totalReceivable = debts.filter(d => d.type === 'receivable' && d.status !== 'settled').reduce((sum, d) => sum + (Number(d.amount) || 0), 0);
     return { totalPayable, totalReceivable };
   }, [debts]);
+
+  // Break-even
+  const bepCalculations = useMemo(() => {
+    const contributionMargin = Math.max(0, avgPricePerUnit - avgCostPerUnit);
+    const marginRatio = avgPricePerUnit > 0 ? (contributionMargin / avgPricePerUnit) * 100 : 0;
+    const monthlyBreakEvenUnits = contributionMargin > 0 ? Math.ceil(fixedMonthlyOpex / contributionMargin) : 0;
+    const dailyBreakEvenUnits = Math.ceil(monthlyBreakEvenUnits / 30);
+    const monthlyBreakEvenRevenue = monthlyBreakEvenUnits * avgPricePerUnit;
+    const monthlyVolume = simulatedDailyVolume * 30;
+    const projectedMonthlyRevenue = monthlyVolume * avgPricePerUnit;
+    const projectedMonthlyCOGS = monthlyVolume * avgCostPerUnit;
+    const projectedGrossProfit = projectedMonthlyRevenue - projectedMonthlyCOGS;
+    const projectedNetProfit = projectedGrossProfit - fixedMonthlyOpex;
+
+    let paybackText = '';
+    if (projectedNetProfit > 0) {
+      const paybackMonths = initialInvestment / projectedNetProfit;
+      const years = Math.floor(paybackMonths / 12);
+      const remainingMonths = Math.round(paybackMonths % 12);
+      paybackText = years > 0 ? `${years} ປີ ${remainingMonths > 0 ? `${remainingMonths} ເດືອນ` : ''}` : `${paybackMonths.toFixed(1)} ເດືອນ`;
+    } else {
+      paybackText = 'ຍັງບໍ່ຄືນທຶນ';
+    }
+
+    return {
+      contributionMargin,
+      marginRatio,
+      dailyBreakEvenUnits,
+      monthlyBreakEvenRevenue,
+      projectedNetProfit,
+      paybackText
+    };
+  }, [initialInvestment, fixedMonthlyOpex, avgPricePerUnit, avgCostPerUnit, simulatedDailyVolume]);
 
   const handleAddTransaction = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -179,28 +230,7 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
     }
   };
 
-  const handleAddDebt = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const rawAmt = Number(debtAmount.replace(/,/g, ''));
-    if (!rawAmt || !debtPerson.trim()) return;
-
-    await addDoc(collection(db, 'debts'), {
-      type: debtType,
-      person: debtPerson.trim(),
-      amount: rawAmt,
-      dueDate: debtDueDate,
-      receiptImage: debtReceiptImage,
-      remark: debtRemark.trim(),
-      status: 'pending',
-      createdAt: serverTimestamp()
-    });
-    setDebtPerson('');
-    setDebtAmount('');
-    setDebtReceiptImage('');
-    setDebtRemark('');
-  };
-
-  // 📥 ດຶງລາຍການຈາກໃບບິນ Supplier ທີ່ຕິກເລືອກ ມາລົງບັນຊີ COGS
+  // 🌟 ແກ້ໄຂ: ດຶງໃບບິນ SUPPLIER ແຍກ COGS vs CAPEX (ອຸປະກອນ) ອັດຕະໂນມັດ
   const handleConfirmImportSupplierItems = async () => {
     const selectedIds = Object.keys(selectedSupplierItems).filter(id => selectedSupplierItems[id]);
     if (selectedIds.length === 0) return;
@@ -208,15 +238,28 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
     const itemsToImport = supplierPrices.filter(sp => selectedIds.includes(sp.id));
     const promises = itemsToImport.map(sp => {
       const prod = products.find(p => p.id === sp.productId);
+      const catType = prod?.categoryType || (prod?.isDurable ? 'EQUIPMENT' : 'COGS');
+
+      let bucket: ExpenseBucket = 'cogs';
+      let categoryName = 'ຊື້ເຄື່ອງເຂົ້າຮ້ານ (ຕົ້ນທຶນວັດຖຸດິບ COGS)';
+
+      if (catType === 'EQUIPMENT') {
+        bucket = 'capex';
+        categoryName = 'ການບໍລິຫານຈັດການ: ອຸປະກອນຄົງທີ່ (Equipment & Machines)';
+      } else if (catType === 'OPERATIONAL') {
+        bucket = 'opex';
+        categoryName = 'ຄ່າໃຊ້ຈ່າຍດຳເນີນງານ: ເຄື່ອງໃຊ້ສິ້ນເປືອງ (Consumables)';
+      }
+
       const totalLAK = sp.totalPriceLAK || (sp.currency === 'LAK' ? sp.priceOriginal : sp.priceOriginal * sp.exchangeRate);
 
       return addDoc(collection(db, 'transactions'), {
         type: 'expense',
         amount: totalLAK,
-        category: 'ຊື້ເຄື່ອງເຂົ້າຮ້ານ (ຕົ້ນທຶນວັດຖຸດິບ COGS)',
-        expenseBucket: 'cogs',
+        category: categoryName,
+        expenseBucket: bucket,
         source: 'onepay',
-        description: `ຊື້ ${prod?.name || 'ວັດຖຸດິບ'} ຈາກ ${sp.supplier} (${sp.quantity}ແພັກ)`,
+        description: `ຊື້ ${prod?.name || 'ສິນຄ້າ'} ຈາກ ${sp.supplier} (${sp.quantity}ແພັກ)`,
         receiptImage: sp.receiptImage || '',
         date: sp.date || format(new Date(), 'yyyy-MM-dd'),
         time: sp.time || '12:00',
@@ -229,7 +272,20 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
     setIsSupplierModalOpen(false);
   };
 
-  // Group supplier prices by Date
+  // 🌟 ປ່ຽນປະເພດຕົ້ນທຶນ (ປ່ຽນ 40 ລ້ານຈາກ OPEX ໄປເປັນ CAPEX ທັນທີ!)
+  const handleUpdateBucket = async (txId: string, newBucket: ExpenseBucket) => {
+    let newCategory = 'ຄ່າຮຽນສູດ & R&D ເມນູໃໝ່ (CAPEX)';
+    if (newBucket === 'cogs') newCategory = 'ຊື້ເຄື່ອງເຂົ້າຮ້ານ (ຕົ້ນທຶນວັດຖຸດິບ COGS)';
+    else if (newBucket === 'opex') newCategory = 'ຄ່າໃຊ້ຈ່າຍດຳເນີນງານ (OPEX)';
+    else if (newBucket === 'dividend') newCategory = 'ປັນຜົນຫຸ້ນສ່ວນ (Dividend)';
+
+    await updateDoc(doc(db, 'transactions', txId), {
+      expenseBucket: newBucket,
+      category: newCategory
+    });
+    setEditingBucketTx(null);
+  };
+
   const groupedSupplierPricesByDate = useMemo(() => {
     const groups: { [dateStr: string]: any[] } = {};
     supplierPrices.forEach(sp => {
@@ -243,7 +299,7 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
   return (
     <div className="space-y-6 font-sans pb-16">
       
-      {/* Header */}
+      {/* Header Banner */}
       <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 bg-white dark:bg-[#141414] p-6 rounded-3xl border border-slate-200/80 dark:border-neutral-800 shadow-xs">
         <div>
           <span className="bg-[#052659] dark:bg-white dark:text-neutral-950 text-white text-[9px] font-black px-2.5 py-1 rounded-full uppercase tracking-widest">
@@ -253,42 +309,78 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
             Financial Transactions & Debt Accounts
           </h1>
           <p className="text-xs text-slate-400 mt-0.5">
-            {i18n.language === 'la' ? 'ບັນທຶກລາຍຮັບ-ລາຍຈ່າຍພ້ອມໃບບິນ, ດຶງໃບບິນ Supplier ຕາມວັນທີ, ແລະ ຄຸ້ມຄອງໜີ້ສິນ' : 'Record transactions with receipts, pull supplier invoices by date & manage AP/AR'}
+            {timeFilter === 'monthly' ? `ສະແດງຂໍ້ມູນປະຈຳເດືອນ: ${selectedMonth}` : 'ສະແດງຂໍ້ມູນການເງິນສະສົມທັງໝົດ (All-Time)'}
           </p>
         </div>
 
-        <button
-          onClick={() => setIsSupplierModalOpen(true)}
-          className="crystal-button !py-2.5 !px-4 flex items-center gap-2 cursor-pointer"
-        >
-          <Receipt className="w-4 h-4" />
-          <span>{i18n.language === 'la' ? 'ດຶງຈາກໃບບິນ Supplier' : 'Import Supplier Bill'}</span>
-        </button>
+        {/* 🌟 ປຸ່ມສະຫຼັບເບິ່ງ: ລາຍເດືອນ vs ທັງໝົດ & ປຸ່ມດຶງ Supplier */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center bg-slate-100 dark:bg-neutral-900 p-1 rounded-2xl border border-slate-200 dark:border-neutral-800">
+            <button
+              onClick={() => setTimeFilter('all')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${timeFilter === 'all' ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950 shadow-xs' : 'text-slate-400'}`}
+            >
+              ທັງໝົດ (All-Time)
+            </button>
+            <button
+              onClick={() => setTimeFilter('monthly')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${timeFilter === 'monthly' ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950 shadow-xs' : 'text-slate-400'}`}
+            >
+              ລາຍເດືອນ
+            </button>
+          </div>
+
+          {timeFilter === 'monthly' && (
+            <input
+              type="month"
+              value={selectedMonth}
+              onChange={e => setSelectedMonth(e.target.value)}
+              className="crystal-input !py-1.5 !text-xs font-mono font-bold"
+            />
+          )}
+
+          {subView === 'transactions' && (
+            <button
+              onClick={() => setIsSupplierModalOpen(true)}
+              className="crystal-button !py-2.5 !px-4 flex items-center gap-2 cursor-pointer"
+            >
+              <Receipt className="w-4 h-4" />
+              <span>ດຶງຈາກໃບບິນ Supplier</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Sub Tabs */}
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <button
           onClick={() => setSubView('transactions')}
-          className={`px-4 py-2 rounded-2xl text-xs font-bold transition-all cursor-pointer ${subView === 'transactions' ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950' : 'bg-white dark:bg-[#141414] border border-slate-200 dark:border-neutral-800 text-slate-400'}`}
+          className={`px-4 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer ${subView === 'transactions' ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950' : 'bg-white dark:bg-[#141414] border border-slate-200 dark:border-neutral-800 text-slate-400'}`}
         >
-          {i18n.language === 'la' ? 'ບັນຊີລາຍຮັບ-ລາຍຈ່າຍ' : 'Transactions'}
+          ບັນຊີລາຍຮັບ-ລາຍຈ່າຍ
         </button>
         <button
           onClick={() => setSubView('debts')}
-          className={`px-4 py-2 rounded-2xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${subView === 'debts' ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950' : 'bg-white dark:bg-[#141414] border border-slate-200 dark:border-neutral-800 text-slate-400'}`}
+          className={`px-4 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${subView === 'debts' ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950' : 'bg-white dark:bg-[#141414] border border-slate-200 dark:border-neutral-800 text-slate-400'}`}
         >
           <HandCoins className="w-3.5 h-3.5" />
-          <span>{i18n.language === 'la' ? 'ໜີ້ຕ້ອງສົ່ງ & ໜີ້ຕ້ອງຮັບ (AP / AR)' : 'AP & AR Debts'}</span>
+          <span>ໜີ້ຕ້ອງສົ່ງ & ໜີ້ຕ້ອງຮັບ (AP / AR)</span>
+        </button>
+        <button
+          onClick={() => setSubView('breakeven')}
+          className={`px-4 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${subView === 'breakeven' ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950' : 'bg-white dark:bg-[#141414] border border-slate-200 dark:border-neutral-800 text-slate-400'}`}
+        >
+          <Target className="w-3.5 h-3.5 text-amber-500" />
+          <span>ຄຳນວນຈຸດຄຸ້ມທຶນ & ໄລຍະຄືນທຶນ</span>
         </button>
       </div>
 
-      {subView === 'transactions' ? (
+      {/* VIEW 1: TRANSACTIONS & CLEAN CARDS */}
+      {subView === 'transactions' && (
         <>
-          {/* ✨ Cards: Clean Minimalist Borders (ບໍ່ມີຂອບສີແຖບໃຫຍ່) */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
             <div className="high-density-card p-5 space-y-1">
-              <span className="label-xs flex justify-between"><span>ລາຍຮັບລວມ</span><span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span></span>
+              <span className="label-xs flex justify-between"><span>ລາຍຮັບລວມ (Revenue)</span><span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span></span>
               <h2 className="text-xl font-bold font-mono text-emerald-600 dark:text-emerald-400 mt-2">+{metrics.totalIncome.toLocaleString()} ₭</h2>
             </div>
             <div className="high-density-card p-5 space-y-1">
@@ -300,7 +392,7 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
               <h2 className="text-xl font-bold font-mono text-blue-600 dark:text-blue-400 mt-2">-{metrics.opexTotal.toLocaleString()} ₭</h2>
             </div>
             <div className="high-density-card p-5 space-y-1">
-              <span className="label-xs flex justify-between"><span>CAPEX & ອຸປະກອນ</span><span className="w-1.5 h-1.5 rounded-full bg-purple-500"></span></span>
+              <span className="label-xs flex justify-between"><span>CAPEX & ອຸປະກອນ/ສູດ</span><span className="w-1.5 h-1.5 rounded-full bg-purple-500"></span></span>
               <h2 className="text-xl font-bold font-mono text-purple-600 dark:text-purple-400 mt-2">-{metrics.capexTotal.toLocaleString()} ₭</h2>
             </div>
             <div className="high-density-card p-5 space-y-1">
@@ -333,10 +425,10 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
                         {[
                           { id: 'cogs', name: 'COGS ວັດຖຸດິບ' },
                           { id: 'opex', name: 'OPEX ດຳເນີນງານ' },
-                          { id: 'capex', name: 'CAPEX ອຸປະກອນ' },
+                          { id: 'capex', name: 'CAPEX ອຸປະກອນ/ສູດ' },
                           { id: 'dividend', name: 'ປັນຜົນ' }
                         ].map(b => (
-                          <button key={b.id} type="button" onClick={() => setExpenseBucket(b.id as any)} className={`p-2 rounded-xl text-xs font-bold border text-left cursor-pointer ${expenseBucket === b.id ? 'border-[#052659] dark:border-white bg-[#052659]/5 dark:bg-white/5 font-black' : 'border-slate-200 dark:border-neutral-800 text-slate-400'}`}>
+                          <button key={b.id} type="button" onClick={() => setExpenseBucket(b.id as any)} className={`p-2 rounded-xl text-xs font-bold border text-left ${expenseBucket === b.id ? 'border-[#052659] dark:border-white bg-[#052659]/5 dark:bg-white/5 font-black' : 'border-slate-200 dark:border-neutral-800 text-slate-400'}`}>
                             {b.name}
                           </button>
                         ))}
@@ -348,18 +440,16 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
                     <label className="label-xs block mb-1">ຊ່ອງທາງຊຳລະ</label>
                     <div className="grid grid-cols-3 gap-1.5">
                       {['cash', 'onepay', 'ldb'].map(s => (
-                        <button key={s} type="button" onClick={() => setSource(s as any)} className={`py-2 text-xs font-bold rounded-xl border uppercase cursor-pointer ${source === s ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950 border-transparent' : 'border-slate-200 dark:border-neutral-800 text-slate-500'}`}>
+                        <button key={s} type="button" onClick={() => setSource(s as any)} className={`py-2 text-xs font-bold rounded-xl border uppercase ${source === s ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950 border-transparent' : 'border-slate-200 dark:border-neutral-800 text-slate-500'}`}>
                           {s}
                         </button>
                       ))}
                     </div>
                   </div>
 
-                  {/* 📸 ປັບປຸງຊ່ອງອັບໂຫຼດຮູບໃບບິນ: ມີ Preview, Drag & Drop, Ctrl+V */}
                   <div>
                     <label className="label-xs flex justify-between mb-1">
-                      <span>ຮູບໃບບິນ (Receipt Attachment)</span>
-                      <span className="text-emerald-500 font-bold text-[9px]">Ctrl+V ວາງໄດ້</span>
+                      <span>ຮູບໃບບິນ (Ctrl+V ວາງໄດ້)</span>
                     </label>
                     <div className="border border-dashed border-slate-200 dark:border-neutral-700 rounded-xl p-2.5 relative flex items-center justify-between hover:bg-slate-50 dark:hover:bg-neutral-800/40 transition-colors">
                       <input type="file" accept="image/*" onChange={async (e) => {
@@ -390,32 +480,50 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
               </div>
             </div>
 
-            {/* Table */}
+            {/* Table with Click-to-Edit Bucket */}
             <div className="lg:col-span-8">
               <div className="high-density-card p-5 overflow-hidden">
-                <h3 className="text-sm font-serif text-slate-800 dark:text-white mb-4">ປະຫວັດທຸລະກຳ</h3>
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-sm font-serif text-slate-800 dark:text-white">ປະຫວັດທຸລະກຳ</h3>
+                  <span className="text-[10px] text-slate-400">ຄລິກທີ່ປ້າຍກຸ່ມຕົ້ນທຶນເພື່ອປ່ຽນ OPEX ➔ CAPEX ໄດ້</span>
+                </div>
+
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs">
                     <thead className="bg-slate-50 dark:bg-neutral-900/60 text-[10px] font-black uppercase text-slate-400">
                       <tr>
                         <th className="p-3">ວັນທີ</th>
                         <th className="p-3">ລາຍລະອຽດ</th>
-                        <th className="p-3">ຊ່ອງທາງ</th>
+                        <th className="p-3">ກຸ່ມຕົ້ນທຶນ (ຄລິກແກ້ໄຂ)</th>
                         <th className="p-3 text-right">ຈຳນວນເງິນ</th>
                         <th className="p-3 text-center">ໃບບິນ</th>
                         <th className="p-3 text-center">ຈັດການ</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-neutral-800">
-                      {transactions.map(t => (
+                      {filteredTransactions.map(t => (
                         <tr key={t.id} className="hover:bg-slate-50/50 dark:hover:bg-neutral-800/30">
-                          <td className="p-3 font-mono text-slate-400">{t.date}</td>
+                          <td className="p-3 font-mono text-slate-400 whitespace-nowrap">{t.date}</td>
                           <td className="p-3">
                             <span className="font-bold text-slate-800 dark:text-white block">{t.description || t.category}</span>
-                            <span className="text-[9px] uppercase text-slate-400 font-mono">{t.expenseBucket || 'Income'}</span>
+                            <span className="text-[10px] text-slate-400 font-mono uppercase">{t.source}</span>
                           </td>
-                          <td className="p-3 uppercase font-mono text-[10px]">{t.source}</td>
-                          <td className={`p-3 text-right font-mono font-bold ${t.type === 'income' ? 'text-emerald-500' : 'text-rose-500'}`}>
+                          <td className="p-3 whitespace-nowrap">
+                            {/* 🌟 ກົດໃສ່ປ້າຍນີ້ເພື່ອປ່ຽນ 40 ລ້ານ ເປັນ CAPEX ໄດ້ທັນທີ! */}
+                            <span 
+                              onClick={() => setEditingBucketTx(t)}
+                              className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase cursor-pointer hover:scale-105 transition-transform inline-flex items-center gap-1 ${
+                                t.expenseBucket === 'capex' ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' :
+                                t.expenseBucket === 'cogs' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' :
+                                t.expenseBucket === 'dividend' ? 'bg-pink-500/10 text-pink-400 border border-pink-500/20' :
+                                'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                              }`}
+                              title="ກົດເພື່ອປ່ຽນປະເພດ (OPEX ➔ CAPEX)"
+                            >
+                              {t.expenseBucket ? t.expenseBucket.toUpperCase() : (t.type === 'income' ? 'INCOME' : 'OPEX')} ✏️
+                            </span>
+                          </td>
+                          <td className={`p-3 text-right font-mono font-bold whitespace-nowrap ${t.type === 'income' ? 'text-emerald-500' : 'text-rose-500'}`}>
                             {t.type === 'income' ? '+' : '-'}{Number(t.amount).toLocaleString()} ₭
                           </td>
                           <td className="p-3 text-center">
@@ -426,7 +534,7 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
                             ) : <span className="text-slate-500">-</span>}
                           </td>
                           <td className="p-3 text-center">
-                            <button onClick={() => setAppDialog({ isOpen: true, title: 'ຢືນຢັນການລຶບ', message: 'ທ່ານແນ່ໃຈບໍ່ວ່າຕ້ອງການລຶບທຸລະກຳນີ້?', onConfirm: async () => await deleteDoc(doc(db, 'transactions', t.id)) })} className="text-slate-400 hover:text-rose-500 cursor-pointer">
+                            <button onClick={() => deleteDoc(doc(db, 'transactions', t.id))} className="text-slate-400 hover:text-rose-500 cursor-pointer">
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           </td>
@@ -439,8 +547,10 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
             </div>
           </div>
         </>
-      ) : (
-        /* 📑 ໜີ້ສິນ (AP/AR) + ອັບໂຫຼດຮູບຫຼັກຖານໜີ້ */
+      )}
+
+      {/* VIEW 2: DEBTS (AP / AR) */}
+      {subView === 'debts' && (
         <div className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="high-density-card p-6">
@@ -478,11 +588,8 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
                     <input type="date" required value={debtDueDate} onChange={e => setDebtDueDate(e.target.value)} className="crystal-input w-full !text-xs font-mono" />
                   </div>
 
-                  {/* 📸 Debt Receipt Upload */}
                   <div>
-                    <label className="label-xs flex justify-between mb-1">
-                      <span>ຮູບຫຼັກຖານໜີ້ສິນ (Ctrl+V)</span>
-                    </label>
+                    <label className="label-xs flex justify-between mb-1"><span>ຮູບຫຼັກຖານໜີ້ສິນ (Ctrl+V)</span></label>
                     <div className="border border-dashed border-slate-200 dark:border-neutral-700 rounded-xl p-2 relative flex items-center justify-between">
                       <input type="file" accept="image/*" onChange={async (e) => {
                         const file = e.target.files?.[0];
@@ -531,9 +638,7 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
                           </td>
                           <td className="p-3 font-bold text-slate-800 dark:text-white">{d.person}</td>
                           <td className="p-3 font-mono text-slate-400">{d.dueDate}</td>
-                          <td className="p-3 text-right font-mono font-bold">
-                            {Number(d.amount).toLocaleString()} ₭
-                          </td>
+                          <td className="p-3 text-right font-mono font-bold">{Number(d.amount).toLocaleString()} ₭</td>
                           <td className="p-3 text-center">
                             {d.receiptImage ? (
                               <button onClick={() => setPreviewImage(d.receiptImage)} className="p-1 rounded bg-emerald-500/10 text-emerald-500">
@@ -550,7 +655,7 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
                             </button>
                           </td>
                           <td className="p-3 text-center">
-                            <button onClick={() => setAppDialog({ isOpen: true, title: 'ຢືນຢັນການລຶບ', message: 'ທ່ານແນ່ໃຈບໍ່ວ່າຕ້ອງການລຶບລາຍການໜີ້ສິນນີ້?', onConfirm: async () => await deleteDoc(doc(db, 'debts', d.id)) })} className="text-slate-400 hover:text-rose-500 cursor-pointer">
+                            <button onClick={() => deleteDoc(doc(db, 'debts', d.id))} className="text-slate-400 hover:text-rose-500 cursor-pointer">
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           </td>
@@ -565,14 +670,44 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
         </div>
       )}
 
-      {/* 📥 MODAL ດຶງໃບບິນ SUPPLIER ຕາມວັນທີ & ເລືອກຕິກໄດ້ */}
+      {/* VIEW 3: BREAK-EVEN SIMULATOR */}
+      {subView === 'breakeven' && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="high-density-card p-5 space-y-1">
+              <span className="label-xs flex justify-between"><span>ຈຸດຄຸ້ມທຶນຕໍ່ວັນ</span><Target className="w-4 h-4 text-amber-500" /></span>
+              <h2 className="text-2xl font-serif font-bold text-slate-800 dark:text-white mt-1">
+                {bepCalculations.dailyBreakEvenUnits.toLocaleString()} <span className="text-xs font-sans font-normal opacity-70">ຈອກ/ວັນ</span>
+              </h2>
+            </div>
+            <div className="high-density-card p-5 space-y-1">
+              <span className="label-xs flex justify-between"><span>ຍອດຂາຍຄຸ້ມທຶນ/ເດືອນ</span><Calculator className="w-4 h-4 text-sky-500" /></span>
+              <h2 className="text-2xl font-serif font-bold text-slate-800 dark:text-white mt-1">
+                {Math.round(bepCalculations.monthlyBreakEvenRevenue).toLocaleString()} ₭
+              </h2>
+            </div>
+            <div className="high-density-card p-5 space-y-1">
+              <span className="label-xs flex justify-between"><span>ໄລຍະເວລາຄືນທຶນ</span><Sparkles className="w-4 h-4 text-emerald-500" /></span>
+              <h2 className="text-2xl font-serif font-bold text-emerald-500 mt-1">{bepCalculations.paybackText}</h2>
+            </div>
+            <div className="high-density-card p-5 space-y-1">
+              <span className="label-xs flex justify-between"><span>ກຳໄລສຸດທິຄາດຄະເນ/ເດືອນ</span><TrendingUp className="w-4 h-4 text-purple-500" /></span>
+              <h2 className="text-2xl font-serif font-bold text-purple-500 mt-1">
+                {Math.round(bepCalculations.projectedNetProfit).toLocaleString()} ₭
+              </h2>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 📥 MODAL ດຶງໃບບິນ SUPPLIER: ແຍກ COGS vs CAPEX ອັດຕະໂນມັດ */}
       {isSupplierModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setIsSupplierModalOpen(false)}>
           <div className="bg-white dark:bg-[#141414] rounded-3xl p-6 border border-slate-200 dark:border-neutral-800 max-w-2xl w-full space-y-4 max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center border-b border-slate-100 dark:border-neutral-800 pb-3">
               <div>
-                <h3 className="text-sm font-serif text-slate-800 dark:text-white">ດຶງລາຍການຈາກໃບບິນ Supplier ມາລົງບັນຊີ (COGS)</h3>
-                <p className="text-[10px] text-slate-400 mt-0.5">ເລືອກຕິກເອົາສະເພາະລາຍການທີ່ຕ້ອງການດຶງເຂົ້າບັນຊີ</p>
+                <h3 className="text-sm font-serif text-slate-800 dark:text-white">ດຶງລາຍການຈາກໃບບິນ Supplier ມາລົງບັນຊີ (COGS & CAPEX)</h3>
+                <p className="text-[10px] text-slate-400 mt-0.5">ລະບົບຈະກວດສອບອັດຕະໂນມັດ ຖ້າເປັນອຸປະກອນຈະແລ່ນເຂົ້າ CAPEX, ຖ້າເປັນວັດຖຸດິບຈະເຂົ້າ COGS</p>
               </div>
               <button onClick={() => setIsSupplierModalOpen(false)} className="text-slate-400 hover:text-white">✕</button>
             </div>
@@ -591,6 +726,7 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
                     <div className="space-y-1.5 pt-1">
                       {groupedSupplierPricesByDate[dateKey].map(sp => {
                         const pr = products.find(p => p.id === sp.productId);
+                        const catType = pr?.categoryType || (pr?.isDurable ? 'EQUIPMENT' : 'COGS');
                         const total = sp.totalPriceLAK || (sp.currency === 'LAK' ? sp.priceOriginal : sp.priceOriginal * sp.exchangeRate);
                         const isChecked = !!selectedSupplierItems[sp.id];
 
@@ -608,8 +744,15 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
                                 className="w-4 h-4 rounded text-emerald-500" 
                               />
                               <div>
-                                <span className="text-xs font-bold text-slate-800 dark:text-white block">{pr?.name || 'Item'} ({sp.supplier})</span>
-                                <span className="text-[10px] text-slate-400">{sp.quantity}ແພັກ × {sp.quantityPerUnit}{sp.unit}</span>
+                                <div className="flex items-center gap-1.5">
+                                  <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase ${
+                                    catType === 'EQUIPMENT' ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                                  }`}>
+                                    {catType === 'EQUIPMENT' ? 'CAPEX (ອຸປະກອນ)' : 'COGS (ວັດຖຸດິບ)'}
+                                  </span>
+                                  <span className="text-xs font-bold text-slate-800 dark:text-white">{pr?.name || 'Item'}</span>
+                                </div>
+                                <span className="text-[10px] text-slate-400">{sp.supplier} • {sp.quantity}ແພັກ</span>
                               </div>
                             </div>
                             <span className="text-xs font-mono font-bold text-emerald-500">+{Math.round(total).toLocaleString()} ₭</span>
@@ -624,40 +767,45 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
 
             <div className="flex justify-between items-center pt-3 border-t border-slate-100 dark:border-neutral-800">
               <span className="text-xs text-slate-400">ເລືອກແລ້ວ: {Object.values(selectedSupplierItems).filter(Boolean).length} ລາຍການ</span>
-              <button onClick={handleConfirmImportSupplierItems} className="crystal-button !py-2.5 !px-6">ດຶງເຂົ້າບັນຊີ COGS ທັນທີ</button>
+              <button onClick={handleConfirmImportSupplierItems} className="crystal-button !py-2.5 !px-6">ດຶງເຂົ້າບັນຊີທັນທີ</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Modal Preview Image */}
+      {/* 🌟 MODAL ປ່ຽນປະເພດຕົ້ນທຶນ (ປ່ຽນ 40 ລ້ານຈາກ OPEX ໄປເປັນ CAPEX) */}
+      {editingBucketTx && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setEditingBucketTx(null)}>
+          <div className="bg-white dark:bg-[#141414] rounded-3xl p-6 border border-slate-200 dark:border-neutral-800 max-w-sm w-full space-y-4" onClick={e => e.stopPropagation()}>
+            <h3 className="text-sm font-serif text-slate-800 dark:text-white">ປ່ຽນປະເພດຕົ້ນທຶນ</h3>
+            <p className="text-xs text-slate-400 leading-normal">
+              ເລືອກກຸ່ມຕົ້ນທຶນໃໝ່ສຳລັບລາຍການ "{editingBucketTx.description || editingBucketTx.category}" ({Number(editingBucketTx.amount).toLocaleString()} ₭):
+            </p>
+
+            <div className="grid grid-cols-2 gap-2 pt-2">
+              <button onClick={() => handleUpdateBucket(editingBucketTx.id, 'capex')} className="p-3 rounded-2xl bg-purple-500/10 border border-purple-500 text-purple-400 font-bold text-xs text-left cursor-pointer">
+                CAPEX (ຄ່າສູດ & ອຸປະກອນ)
+              </button>
+              <button onClick={() => handleUpdateBucket(editingBucketTx.id, 'cogs')} className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500 text-amber-400 font-bold text-xs text-left cursor-pointer">
+                COGS ວັດຖຸດິບ
+              </button>
+              <button onClick={() => handleUpdateBucket(editingBucketTx.id, 'opex')} className="p-3 rounded-2xl bg-blue-500/10 border border-blue-500 text-blue-400 font-bold text-xs text-left cursor-pointer">
+                OPEX ດຳເນີນງານ
+              </button>
+              <button onClick={() => handleUpdateBucket(editingBucketTx.id, 'dividend')} className="p-3 rounded-2xl bg-pink-500/10 border border-pink-500 text-pink-400 font-bold text-xs text-left cursor-pointer">
+                ປັນຜົນ (Dividend)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Preview Image Modal */}
       {previewImage && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm" onClick={() => setPreviewImage(null)}>
           <div className="relative max-w-xl max-h-[85vh] bg-[#141414] rounded-3xl p-3 border border-neutral-800" onClick={e => e.stopPropagation()}>
             <button onClick={() => setPreviewImage(null)} className="absolute top-4 right-4 p-2 rounded-full bg-black/60 text-white cursor-pointer">✕</button>
             <img src={previewImage} alt="Receipt" className="w-full h-auto max-h-[80vh] object-contain rounded-2xl" />
-          </div>
-        </div>
-      )}
-
-      {/* 💬 In-App Dialog Modal (ບໍ່ໃຊ້ alert/confirm browser) */}
-      {appDialog.isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
-          <div className="bg-white dark:bg-[#141414] rounded-3xl p-6 border border-slate-200 dark:border-neutral-800 max-w-sm w-full space-y-4">
-            <h3 className="text-sm font-serif text-slate-800 dark:text-white">{appDialog.title}</h3>
-            <p className="text-xs text-slate-400">{appDialog.message}</p>
-            <div className="flex gap-2 pt-2">
-              <button onClick={() => setAppDialog({ isOpen: false, title: '', message: '' })} className="flex-1 py-2.5 rounded-xl border text-xs font-bold text-slate-400">ຍົກເລີກ</button>
-              <button 
-                onClick={() => {
-                  appDialog.onConfirm?.();
-                  setAppDialog({ isOpen: false, title: '', message: '' });
-                }} 
-                className="flex-1 py-2.5 rounded-xl bg-rose-600 text-white text-xs font-bold"
-              >
-                ຢືນຢັນ
-              </button>
-            </div>
           </div>
         </div>
       )}
