@@ -7,7 +7,8 @@ import { db, handleFirestoreError, OperationType } from '../firebase';
 import { useTranslation } from 'react-i18next';
 import { 
   BookOpen, Plus, Trash2, Edit2, Calendar, 
-  Package, ShoppingCart, Layers, Zap, Utensils
+  Package, ShoppingCart, Layers, Zap, Utensils, FileText,
+  DollarSign, TrendingUp, Percent, Sparkles, Tag
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -36,6 +37,7 @@ const BottleGauge = ({ currentMl, packSize = 1000 }: { currentMl: number; packSi
           <rect x="12" y="7" width="8" height="8" fill="none" stroke="currentColor" strokeWidth="2" />
           <path d="M 12 15 C 6 18 4 22 4 28 L 4 58 C 4 61 7 62 10 62 L 22 62 C 25 62 28 61 28 58 L 28 28 C 28 22 26 18 20 15 Z" fill="none" stroke="currentColor" strokeWidth="2" />
         </svg>
+        
         <div 
           className="absolute bottom-1 w-4 rounded-b-md bg-gradient-to-t from-sky-500 to-sky-400 transition-all duration-700" 
           style={{ height: `${Math.max(3, (percent * 34) / 100)}px` }}
@@ -55,7 +57,7 @@ const BottleGauge = ({ currentMl, packSize = 1000 }: { currentMl: number; packSi
   );
 };
 
-// 💡 ຟັງຊັ້ນແປງຫົວໜ່ວຍ: ຮອງຮັບ ຊ້ອນຊາ (tsp), ຊ້ອນໂຕະ (tbsp), g, ml
+// ແປງຫົວໜ່ວຍ: ຮອງຮັບ ຊ້ອນຊາ (tsp), ຊ້ອນໂຕະ (tbsp), g, ml
 export function getIngredientBaseQtyAndCost(
   amount: number,
   ingUnitStr: string,
@@ -66,11 +68,10 @@ export function getIngredientBaseQtyAndCost(
   const packSize = costStructure.qtyPerPack || 1000;
   let baseUnits = amount;
 
-  // ແປງຊ້ອນຊາ & ຊ້ອນໂຕະ ເປັນກຣາມ/ມິນລິລິດມາດຕະຖານ
   if (u === 'tsp' || u === 'ຊ້ອນຊາ') {
-    baseUnits = amount * 5; // 1 ຊ້ອນຊາ = 5g (ຫຼື 5ml) -> 1/4 ຊ້ອນຊາ = 1.25g
+    baseUnits = amount * 5; // 1 tsp = 5g (ຫຼື 5ml) -> 1/4 tsp = 1.25g
   } else if (u === 'tbsp' || u === 'ຊ້ອນໂຕະ') {
-    baseUnits = amount * 15; // 1 ຊ້ອນໂຕະ = 15g (ຫຼື 15ml)
+    baseUnits = amount * 15; // 1 tbsp = 15g (ຫຼື 15ml)
   } else if (u === 'pack' || u === 'box' || u === 'bag') {
     baseUnits = amount * packSize;
   } else if (u === 'kg' || u === 'l') {
@@ -101,9 +102,12 @@ export default function Inventory() {
   const [salesRecords, setSalesRecords] = useState<any[]>([]);
   const [adjustments, setAdjustments] = useState<any[]>([]);
 
-  // Recipe Builder Form State
+  // 📝 Recipe Builder Form State
   const [menuName, setMenuName] = useState('');
   const [overheadCost, setOverheadCost] = useState<number | string>(1500); // ຄ່ານ້ຳ-ຄ່າໄຟ-ບັນຈຸພັນ
+  const [sellingPrice, setSellingPrice] = useState<number | string>(35000); // ✨ ລາຄາຂາຍທີ່ຕັ້ງໄວ້ (Selling Price)
+  const [pricingNote, setPricingNote] = useState(''); // ✨ Note ການຕັ້ງລາຄາ & ກຳໄລ
+  const [note, setNote] = useState(''); // Note ວິທີເຮັດ & ເທັກນິກ
   const [recipeIngredients, setRecipeIngredients] = useState<RecipeIngredientRow[]>([]);
   const [editingRecipe, setEditingRecipe] = useState<any | null>(null);
   const [isRecipeModalOpen, setIsRecipeModalOpen] = useState(false);
@@ -167,7 +171,7 @@ export default function Inventory() {
     return Array.from(map.values());
   }, [supplierPrices, products]);
 
-  // ຄິດໄລ່ຕົ້ນທຶນລາຍການສູດ
+  // 💡 ຄິດໄລ່ຕົ້ນທຶນ, ລາຄາຂາຍ & ກຳໄລສຸດທິຕໍ່ໜ່ວຍ
   const recipesWithCalculatedCosts = useMemo(() => {
     return recipes.map(recipe => {
       let rawCost = 0;
@@ -177,7 +181,6 @@ export default function Inventory() {
         const amt = Number(ing.amount) || 0;
         const u = (ing.unit || pr?.unit || 'g').toLowerCase();
 
-        // ຄິດໄລ່ຕົ້ນທຶນຕາມຫົວໜ່ວຍ ຊ້ອນຊາ (tsp), ຊ້ອນໂຕະ (tbsp), g, ml
         let baseUnits = amt;
         if (u === 'tsp' || u === 'ຊ້ອນຊາ') baseUnits = amt * 5;
         else if (u === 'tbsp' || u === 'ຊ້ອນໂຕະ') baseUnits = amt * 15;
@@ -197,13 +200,21 @@ export default function Inventory() {
 
       const overhead = Number(recipe.overheadCost) || 0;
       const totalCostPerCup = rawCost + overhead;
+      const price = Number(recipe.sellingPrice) || 0;
+      const netProfitPerCup = price > 0 ? price - totalCostPerCup : 0;
+      const profitMarginPercent = price > 0 ? (netProfitPerCup / price) * 100 : 0;
 
       return {
         ...recipe,
         ingredientsDetailed: parsedIngredients,
         rawCost,
         overheadCost: overhead,
-        totalCostPerCup
+        totalCostPerCup,
+        sellingPrice: price,
+        netProfitPerCup,
+        profitMarginPercent,
+        pricingNote: recipe.pricingNote || '', // ✨ Note ການຕັ້ງລາຄາ
+        note: recipe.note || ''
       };
     });
   }, [recipes, products]);
@@ -251,7 +262,7 @@ export default function Inventory() {
     });
   }, [products, supplierPrices, salesRecords, recipes, adjustments]);
 
-  // 🚀 ບັນທຶກສູດເຄື່ອງດື່ມ / Cookie
+  // 🚀 ບັນທຶກສູດເຄື່ອງດື່ມ / Cookie (ພ້ອມ Selling Price & Pricing Note)
   const handleSaveRecipe = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!menuName.trim() || recipeIngredients.length === 0) {
@@ -276,6 +287,9 @@ export default function Inventory() {
       const recipePayload = {
         menuName: menuName.trim(),
         overheadCost: Number(overheadCost) || 0,
+        sellingPrice: Number(sellingPrice) || 0, // ✨ ບັນທຶກລາຄາຂາຍ
+        pricingNote: pricingNote.trim(),         // ✨ ບັນທຶກ Note ການຕັ້ງລາຄາ & ກຳໄລ
+        note: note.trim(),                       // Note ວິທີເຮັດ
         ingredients: payloadIngredients,
         updatedAt: serverTimestamp()
       };
@@ -290,8 +304,11 @@ export default function Inventory() {
       setEditingRecipe(null);
       setMenuName('');
       setOverheadCost(1500);
+      setSellingPrice(35000);
+      setPricingNote('');
+      setNote('');
       setRecipeIngredients([]);
-      alert("ບັນທຶກສູດສຳເລັດແລ້ວ!");
+      alert("ບັນທຶກສູດພ້ອມການຕັ້ງລາຄາ ແລະ ກຳໄລສຳເລັດແລ້ວ!");
     } finally {
       setIsSavingRecipe(false);
     }
@@ -308,6 +325,26 @@ export default function Inventory() {
     setRecipeIngredients(prev => prev.filter((_, i) => i !== idx));
   };
 
+  // ຄິດໄລ່ Live Modal Calculation
+  const currentModalCalculation = useMemo(() => {
+    const rawCost = recipeIngredients.reduce((s, it) => {
+      const amt = Number(it.amount) || 0;
+      const u = (it.unit || 'g').toLowerCase();
+      let bUnits = amt;
+      if (u === 'tsp' || u === 'ຊ້ອນຊາ') bUnits = amt * 5;
+      else if (u === 'tbsp' || u === 'ຊ້ອນໂຕະ') bUnits = amt * 15;
+      return s + (bUnits * (it.unitCostLAK || 0));
+    }, 0);
+
+    const overhead = Number(overheadCost) || 0;
+    const totalCost = rawCost + overhead;
+    const price = Number(sellingPrice) || 0;
+    const netProfit = price > 0 ? price - totalCost : 0;
+    const margin = price > 0 ? (netProfit / price) * 100 : 0;
+
+    return { rawCost, overhead, totalCost, price, netProfit, margin };
+  }, [recipeIngredients, overheadCost, sellingPrice]);
+
   return (
     <div className="space-y-6 font-sans pb-16">
       
@@ -315,13 +352,13 @@ export default function Inventory() {
       <div className="flex flex-col lg:flex-row justify-between lg:items-center gap-4 p-6 bg-white dark:bg-[#141414] rounded-3xl border border-slate-200/80 dark:border-neutral-800 shadow-sm">
         <div>
           <span className="bg-[#052659] dark:bg-white dark:text-neutral-950 text-white text-[9px] font-black px-2.5 py-1 rounded-full uppercase tracking-widest">
-            Le Ouve Recipe & Cookie Formulation
+            Le Ouve Recipe & Pricing Engine
           </span>
           <h1 className="text-2xl md:text-3xl font-serif text-slate-800 dark:text-white mt-1">
-            ສູດເຄື່ອງດື່ມ & Cookie (ຮອງຮັບ 1/4 ແລະ 1/2 ຊ້ອນຊາ)
+            ສູດເຄື່ອງດື່ມ, ລາຄາຂາຍ & ເປົ້າໝາຍກຳໄລ
           </h1>
           <p className="text-xs text-slate-400 mt-0.5">
-            ມີປຸ່ມກົດເລືອກ 1/4 ຊ້ອນຊາ, 1/2 ຊ້ອນຊາ ແລະ 1 ຊ້ອນໂຕະ ພ້ອມຄິດໄລ່ຕົ້ນທຶນຕົວຈິງຈາກ Supplier
+            ກຳກັບຕົ້ນທຶນວັດຖຸດິບ + ບວກຄ່າໄຟ-ນ້ຳດຳເນີນງານ + ຕັ້ງລາຄາຂາຍ ແລະ ບັນທຶກ Note ເປົ້າໝາຍກຳໄລ
           </p>
         </div>
 
@@ -330,6 +367,9 @@ export default function Inventory() {
             setEditingRecipe(null);
             setMenuName('');
             setOverheadCost(1500);
+            setSellingPrice(35000);
+            setPricingNote('');
+            setNote('');
             setRecipeIngredients([
               { productId: '', name: '', supplier: '', amount: '', unit: 'g', packSize: 1000, unitCostLAK: 0 }
             ]);
@@ -348,7 +388,7 @@ export default function Inventory() {
           onClick={() => setSubTab('recipes')}
           className={`px-4 py-2 rounded-2xl text-xs font-bold transition-all cursor-pointer ${subTab === 'recipes' ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950' : 'bg-white dark:bg-[#141414] border border-slate-200 dark:border-neutral-800 text-slate-400'}`}
         >
-          ສູດເຄື່ອງດື່ມ & Cookie
+          ສູດເຄື່ອງດື່ມ & ລາຄາຂາຍ
         </button>
         <button
           onClick={() => setSubTab('sales')}
@@ -370,29 +410,75 @@ export default function Inventory() {
           {recipesWithCalculatedCosts.map((recipe) => (
             <div key={recipe.id} className="high-density-card p-6 flex flex-col justify-between space-y-4">
               <div>
+                {/* Header: Menu Name & Selling Price */}
                 <div className="flex justify-between items-start border-b border-slate-100 dark:border-neutral-800 pb-3">
-                  <h4 className="text-base font-serif text-slate-800 dark:text-white">{recipe.menuName}</h4>
+                  <div>
+                    <h4 className="text-base font-serif text-slate-800 dark:text-white">{recipe.menuName}</h4>
+                    {recipe.sellingPrice > 0 ? (
+                      <span className="text-xs font-mono font-bold text-sky-500 block mt-0.5">
+                        ລາຄາຂາຍ: {Number(recipe.sellingPrice).toLocaleString()} ₭
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-slate-400 font-light block mt-0.5">ຍັງບໍ່ກຳນົດລາຄາຂາຍ</span>
+                    )}
+                  </div>
                   <div className="text-right">
-                    <span className="text-sm font-black font-mono text-emerald-500 block">
+                    <span className="text-sm font-black font-mono text-slate-800 dark:text-white block">
                       {Math.round(recipe.totalCostPerCup).toLocaleString()} ₭
                     </span>
-                    <span className="text-[9px] text-slate-400 block font-normal">ຕົ້ນທຶນ/ໜ່ວຍ (ຈອກ/ຊິ້ນ)</span>
+                    <span className="text-[9px] text-slate-400 block font-normal">ຕົ້ນທຶນລວມ/ໜ່ວຍ</span>
                   </div>
                 </div>
 
-                <div className="mt-3 p-3 rounded-2xl bg-slate-50 dark:bg-[#1a1a1a] text-xs space-y-1 font-mono">
+                {/* 💵 Cost & Profit Calculation Box */}
+                <div className="mt-3 p-3.5 rounded-2xl bg-slate-50 dark:bg-[#1a1a1a] text-xs space-y-1.5 font-mono">
                   <div className="flex justify-between text-slate-500">
-                    <span>ວັດຖຸດິບ (Raw Materials):</span>
+                    <span>ວັດຖຸດິບ (Raw Cost):</span>
                     <span>{Math.round(recipe.rawCost).toLocaleString()} ₭</span>
                   </div>
-                  <div className="flex justify-between text-sky-500">
-                    <span>ຄ່ານ້ຳ-ຄ່າໄຟ/ແຮງງານ:</span>
+                  <div className="flex justify-between text-slate-500">
+                    <span>+ ຄ່າໄຟ-ນ້ຳ (Overhead):</span>
                     <span>+{Math.round(recipe.overheadCost).toLocaleString()} ₭</span>
                   </div>
+                  
+                  {recipe.sellingPrice > 0 && (
+                    <div className="border-t border-slate-200/60 dark:border-neutral-800 pt-1.5 flex justify-between items-center text-xs">
+                      <span className="font-bold text-slate-700 dark:text-neutral-200">ກຳໄລສຸດທິ/ຈອກ:</span>
+                      <span className={`font-black ${recipe.netProfitPerCup >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                        +{Math.round(recipe.netProfitPerCup).toLocaleString()} ₭ ({recipe.profitMarginPercent.toFixed(1)}%)
+                      </span>
+                    </div>
+                  )}
                 </div>
 
+                {/* ✨ 1. NOTE ການຕັ້ງລາຄາ & ກຳໄລ (PRICING STRATEGY NOTE) */}
+                {recipe.pricingNote && (
+                  <div className="mt-3 p-3.5 rounded-2xl bg-emerald-500/5 dark:bg-emerald-500/10 border border-emerald-500/20 text-xs space-y-1">
+                    <span className="text-[9.5px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
+                      <Tag className="w-3.5 h-3.5" />
+                      <span>Note ການຕັ້ງລາຄາ & ເປົ້າໝາຍກຳໄລ:</span>
+                    </span>
+                    <p className="text-slate-600 dark:text-neutral-300 font-light whitespace-pre-wrap leading-relaxed">
+                      {recipe.pricingNote}
+                    </p>
+                  </div>
+                )}
+
+                {/* ✨ 2. NOTE ວິທີເຮັດ & ເທັກນິກ (RECIPE INSTRUCTION NOTE) */}
+                {recipe.note && (
+                  <div className="mt-3 p-3.5 rounded-2xl bg-amber-500/5 dark:bg-amber-500/10 border border-amber-500/15 text-xs space-y-1">
+                    <span className="text-[9.5px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
+                      <FileText className="w-3.5 h-3.5" />
+                      <span>Note ວິທີເຮັດ & ເທັກນິກ:</span>
+                    </span>
+                    <p className="text-slate-600 dark:text-neutral-300 font-light whitespace-pre-wrap leading-relaxed">
+                      {recipe.note}
+                    </p>
+                  </div>
+                )}
+
                 {/* Ingredients detail */}
-                <div className="divide-y divide-slate-100 dark:divide-neutral-800/60 mt-3 max-h-48 overflow-y-auto pr-1">
+                <div className="divide-y divide-slate-100 dark:divide-neutral-800/60 mt-3 max-h-40 overflow-y-auto pr-1">
                   {recipe.ingredientsDetailed?.map((ing: any, i: number) => {
                     const isSpoon = ing.unitLabel === 'tsp' || ing.unitLabel === 'tbsp';
                     return (
@@ -422,6 +508,9 @@ export default function Inventory() {
                     setEditingRecipe(recipe);
                     setMenuName(recipe.menuName);
                     setOverheadCost(recipe.overheadCost || 1500);
+                    setSellingPrice(recipe.sellingPrice || 35000);
+                    setPricingNote(recipe.pricingNote || '');
+                    setNote(recipe.note || '');
                     setRecipeIngredients((recipe.ingredients || []).map((ing: any) => ({
                       productId: ing.productId,
                       name: ing.name,
@@ -434,12 +523,14 @@ export default function Inventory() {
                     setIsRecipeModalOpen(true);
                   }}
                   className="p-2 text-slate-400 hover:text-sky-500 rounded-lg cursor-pointer"
+                  title="ແກ້ໄຂສູດ, ລາຄາຂາຍ & Note"
                 >
                   <Edit2 className="w-4 h-4" />
                 </button>
                 <button
                   onClick={() => deleteDoc(doc(db, 'recipes', recipe.id))}
                   className="p-2 text-slate-400 hover:text-rose-500 rounded-lg cursor-pointer"
+                  title="ລຶບສູດ"
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
@@ -470,9 +561,14 @@ export default function Inventory() {
               <div key={rec.id} className="p-4 rounded-2xl bg-slate-50 dark:bg-[#1a1a1a] border border-slate-200/60 dark:border-neutral-800 flex items-center justify-between">
                 <div>
                   <h4 className="text-sm font-bold text-slate-800 dark:text-white">{rec.menuName}</h4>
-                  <span className="text-[10px] text-amber-500 font-mono font-bold">
-                    Est Cost: {Math.round(rec.totalCostPerCup).toLocaleString()} ₭/ໜ່ວຍ
-                  </span>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span className="text-[10px] text-sky-500 font-mono font-bold">
+                      ຂາຍ: {Number(rec.sellingPrice || 0).toLocaleString()} ₭
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-mono">
+                      (ຕົ້ນທຶນ: {Math.round(rec.totalCostPerCup).toLocaleString()} ₭)
+                    </span>
+                  </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <button 
@@ -579,23 +675,23 @@ export default function Inventory() {
         </div>
       )}
 
-      {/* 🚀 MODAL: RECIPE BUILDER (ມີປຸ່ມ 1/4 ຊ້ອນຊາ, 1/2 ຊ້ອນຊາ & DROPDOWN SUPPLIER) */}
+      {/* 🚀 MODAL: RECIPE BUILDER (ມີຕັ້ງລາຄາຂາຍ + NOTE ການຕັ້ງລາຄາ & ກຳໄລ) */}
       <AnimatePresence>
         {isRecipeModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
             <motion.div 
               initial={{ opacity: 0, scale: 0.95 }} 
               animate={{ opacity: 1, scale: 1 }} 
-              className="bg-white dark:bg-[#141414] rounded-3xl border border-slate-200 dark:border-neutral-800 w-full max-w-2xl shadow-2xl p-6 md:p-8 space-y-6 max-h-[90vh] overflow-y-auto"
+              className="bg-white dark:bg-[#141414] rounded-3xl border border-slate-200 dark:border-neutral-800 w-full max-w-2xl shadow-2xl p-6 md:p-8 space-y-6 max-h-[92vh] overflow-y-auto"
             >
               <div className="flex justify-between items-center border-b border-slate-100 dark:border-neutral-800 pb-3">
                 <div>
                   <h3 className="text-base font-serif text-slate-800 dark:text-white flex items-center gap-2">
                     <BookOpen className="w-5 h-5 text-emerald-500" />
-                    <span>{editingRecipe ? 'ແກ້ໄຂສູດ' : 'ສ້າງສູດເຄື່ອງດື່ມ / Cookie (Recipe Builder)'}</span>
+                    <span>{editingRecipe ? 'ແກ້ໄຂສູດ & ລາຄາຂາຍ' : 'ສ້າງສູດເຄື່ອງດື່ມ / Cookie (Recipe & Pricing)'}</span>
                   </h3>
                   <p className="text-[10px] text-slate-400 mt-0.5">
-                    ມີປຸ່ມເລືອກ 1/4 ຊ້ອນຊາ, 1/2 ຊ້ອນຊາ, ຊ້ອນໂຕະ ແລະ ດຶງລາຄາຈາກ Supplier ອັດຕະໂນມັດ
+                    ກຳນົດຕົ້ນທຶນວັດຖຸດິບ, ບວກຄ່າໄຟ-ນ້ຳ, ຕັ້ງລາຄາຂາຍ ແລະ ຂຽນ Note ເປົ້າໝາຍກຳໄລ
                   </p>
                 </div>
                 <button onClick={() => setIsRecipeModalOpen(false)} className="text-slate-400 hover:text-white p-1">✕</button>
@@ -603,36 +699,89 @@ export default function Inventory() {
 
               <form onSubmit={handleSaveRecipe} className="space-y-5">
                 <div>
-                  <label className="label-xs block mb-1">ຊື່ເມນູ / ສູດ (ເຊັ່ນ: Choc-Chip Cookie, Latte 16oz)</label>
+                  <label className="label-xs block mb-1">ຊື່ເມນູ / ສູດ (Drink or Cookie Name)</label>
                   <input
                     type="text"
                     required
-                    placeholder="ໃສ່ຊື່ເມນູ..."
+                    placeholder="ໃສ່ຊື່ເມນູ ເຊັ່ນ: Choc-Chip Cookie, Caramel Latte..."
                     value={menuName}
                     onChange={e => setMenuName(e.target.value)}
                     className="crystal-input w-full !text-sm font-bold"
                   />
                 </div>
 
-                {/* Overhead Cost */}
-                <div className="p-3.5 rounded-2xl bg-sky-500/10 border border-sky-500/20 space-y-1">
-                  <label className="label-xs !text-sky-500 flex items-center gap-1.5">
-                    <Zap className="w-3.5 h-3.5" />
-                    <span>ຕົ້ນທຶນຄ່ານ້ຳ, ຄ່າໄຟ, ແຮງງານ, ແກ້ວ ຫຼື ຖົງຫໍ່ (Overhead ຕໍ່ 1 ຊິ້ນ/ຈອກ)</span>
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="number"
-                      value={overheadCost}
-                      onChange={e => setOverheadCost(e.target.value)}
-                      className="crystal-input w-40 font-mono font-bold text-center !py-1.5"
-                      placeholder="1500"
-                    />
-                    <span className="text-xs font-mono font-bold text-slate-400">₭ / ໜ່ວຍ</span>
+                {/* 💵 1. OVERHEAD & SELLING PRICE INPUTS */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  
+                  {/* Overhead Cost */}
+                  <div className="p-3.5 rounded-2xl bg-sky-500/10 border border-sky-500/20 space-y-1">
+                    <label className="label-xs !text-sky-500 flex items-center gap-1.5">
+                      <Zap className="w-3.5 h-3.5" />
+                      <span>ຕົ້ນທຶນດຳເນີນງານ (ຄ່ານ້ຳ, ໄຟ, ແກ້ວ/ຖົງ)</span>
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        value={overheadCost}
+                        onChange={e => setOverheadCost(e.target.value)}
+                        className="crystal-input w-full font-mono font-bold text-center !py-1.5"
+                        placeholder="1500"
+                      />
+                      <span className="text-xs font-mono font-bold text-slate-400 shrink-0">₭ / ໜ່ວຍ</span>
+                    </div>
                   </div>
+
+                  {/* ✨ ລາຄາຂາຍໜ້າຮ້ານ (SELLING PRICE) */}
+                  <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 space-y-1">
+                    <label className="label-xs !text-emerald-500 flex items-center gap-1.5">
+                      <DollarSign className="w-3.5 h-3.5" />
+                      <span>ລາຄາຂາຍທີ່ກຳນົດ (Target Selling Price)</span>
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        value={sellingPrice}
+                        onChange={e => setSellingPrice(e.target.value)}
+                        className="crystal-input w-full font-mono font-bold text-center !py-1.5"
+                        placeholder="35000"
+                      />
+                      <span className="text-xs font-mono font-bold text-emerald-500 shrink-0">₭</span>
+                    </div>
+                  </div>
+
                 </div>
 
-                {/* 🌟 INGREDIENTS LIST WITH 1/4 & 1/2 TEASPOON QUICK BUTTONS */}
+                {/* 🌟 2. NOTE ການຕັ້ງລາຄາ & ເປົ້າໝາຍກຳໄລ (PRICING STRATEGY NOTE) */}
+                <div className="space-y-1">
+                  <label className="label-xs flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
+                    <Tag className="w-3.5 h-3.5" />
+                    <span>Note ກຳກັບການຕັ້ງລາຄາ & ເປົ້າໝາຍກຳໄລ (Pricing Strategy & Profit Target)</span>
+                  </label>
+                  <textarea
+                    rows={2}
+                    placeholder="ຕົວຢ່າງ: ຕົ້ນທຶນວັດຖຸດິບ 15,000₭ ບວກຕົ້ນທຶນດຳເນີນງານ 1,500₭ = ຕົ້ນທຶນລວມ 16,500₭, ຂາຍໃນລາຄາ 35,000₭, ໄດ້ກຳໄລ 18,500₭/ຈອກ..."
+                    value={pricingNote}
+                    onChange={e => setPricingNote(e.target.value)}
+                    className="crystal-input w-full !text-xs font-normal leading-relaxed resize-none"
+                  />
+                </div>
+
+                {/* 3. NOTE ວິທີເຮັດ & ເທັກນິກ (RECIPE INSTRUCTION NOTE) */}
+                <div className="space-y-1">
+                  <label className="label-xs flex items-center gap-1.5 text-slate-500 dark:text-neutral-400">
+                    <FileText className="w-3.5 h-3.5 text-amber-500" />
+                    <span>Note ວິທີເຮັດ & ເທັກນິກ (Recipe Instructions & Method)</span>
+                  </label>
+                  <textarea
+                    rows={2}
+                    placeholder="ເຊັ່ນ: ອົບອຸນຫະພູມ 175°C ເວລາ 12-14 ນາທີ, ຕີເນີຍກັບນ້ຳຕານໃຫ້ຂຶ້ນຟູກ່ອນໃສ່ໄຂ່..."
+                    value={note}
+                    onChange={e => setNote(e.target.value)}
+                    className="crystal-input w-full !text-xs font-normal leading-relaxed resize-none"
+                  />
+                </div>
+
+                {/* INGREDIENTS LIST WITH 1/4 & 1/2 TEASPOON QUICK BUTTONS */}
                 <div className="space-y-3">
                   <div className="flex justify-between items-center">
                     <label className="label-xs">ລາຍການວັດຖຸດິບໃນສູດ</label>
@@ -646,13 +795,12 @@ export default function Inventory() {
                     </button>
                   </div>
 
-                  <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
+                  <div className="space-y-3 max-h-56 overflow-y-auto pr-1">
                     {recipeIngredients.map((ing, idx) => {
                       const currentVal = ing.productId ? `${ing.productId}_${ing.supplier || ''}` : '';
                       const amt = Number(ing.amount) || 0;
                       const u = (ing.unit || 'g').toLowerCase();
 
-                      // ຄິດໄລ່ base units
                       let baseUnits = amt;
                       if (u === 'tsp' || u === 'ຊ້ອນຊາ') baseUnits = amt * 5;
                       else if (u === 'tbsp' || u === 'ຊ້ອນໂຕະ') baseUnits = amt * 15;
@@ -732,8 +880,6 @@ export default function Inventory() {
 
                           {/* ຈຳນວນ, ຫົວໜ່ວຍ & ຕົ້ນທຶນ */}
                           <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center">
-                            
-                            {/* Input Amount */}
                             <div className="sm:col-span-5">
                               <span className="text-[9px] text-slate-400 block mb-0.5">ຈຳນວນທີ່ໃຊ້</span>
                               <input
@@ -747,7 +893,6 @@ export default function Inventory() {
                               />
                             </div>
 
-                            {/* Unit Select (ຮອງຮັບ tsp, tbsp, g, ml, pcs) */}
                             <div className="sm:col-span-3">
                               <span className="text-[9px] text-slate-400 block mb-0.5">ຫົວໜ່ວຍ</span>
                               <select
@@ -763,7 +908,6 @@ export default function Inventory() {
                               </select>
                             </div>
 
-                            {/* 💡 ຄິດໄລ່ຕົ້ນທຶນຕົວຈິງ */}
                             <div className="sm:col-span-4 p-2 rounded-xl bg-slate-100 dark:bg-[#202020] text-right font-mono">
                               <span className="text-[8px] text-slate-400 block uppercase">
                                 ຕົ້ນທຶນ {u === 'tsp' ? `(≈${baseUnits}g)` : u === 'tbsp' ? `(≈${baseUnits}g)` : ''}:
@@ -774,7 +918,7 @@ export default function Inventory() {
                             </div>
                           </div>
 
-                          {/* 🥄 ປຸ່ມກົດເລືອກດ່ວນ: 1/4 ຊ້ອນຊາ, 1/2 ຊ້ອນຊາ, 1 ຊ້ອນຊາ, 1 ຊ້ອນໂຕະ */}
+                          {/* 🥄 ປຸ່ມເລືອກດ່ວນ: 1/4 ຊ້ອນຊາ, 1/2 ຊ້ອນຊາ, 1 ຊ້ອນຊາ, 1 ຊ້ອນໂຕະ */}
                           <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-slate-200/50 dark:border-neutral-800/60">
                             <span className="text-[9px] text-slate-400 font-bold flex items-center gap-1 mr-1">
                               <Utensils className="w-3 h-3 text-amber-500" />
@@ -783,9 +927,7 @@ export default function Inventory() {
 
                             <button
                               type="button"
-                              onClick={() => {
-                                setRecipeIngredients(prev => prev.map((it, i) => i === idx ? { ...it, amount: 0.25, unit: 'tsp' } : it));
-                              }}
+                              onClick={() => setRecipeIngredients(prev => prev.map((it, i) => i === idx ? { ...it, amount: 0.25, unit: 'tsp' } : it))}
                               className="px-2 py-0.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 font-mono text-[9px] font-bold border border-amber-500/20 cursor-pointer"
                             >
                               1/4 ຊ້ອນຊາ (0.25 tsp ≈ 1.25g)
@@ -793,9 +935,7 @@ export default function Inventory() {
 
                             <button
                               type="button"
-                              onClick={() => {
-                                setRecipeIngredients(prev => prev.map((it, i) => i === idx ? { ...it, amount: 0.5, unit: 'tsp' } : it));
-                              }}
+                              onClick={() => setRecipeIngredients(prev => prev.map((it, i) => i === idx ? { ...it, amount: 0.5, unit: 'tsp' } : it))}
                               className="px-2 py-0.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 font-mono text-[9px] font-bold border border-amber-500/20 cursor-pointer"
                             >
                               1/2 ຊ້ອນຊາ (0.50 tsp ≈ 2.5g)
@@ -803,9 +943,7 @@ export default function Inventory() {
 
                             <button
                               type="button"
-                              onClick={() => {
-                                setRecipeIngredients(prev => prev.map((it, i) => i === idx ? { ...it, amount: 1, unit: 'tsp' } : it));
-                              }}
+                              onClick={() => setRecipeIngredients(prev => prev.map((it, i) => i === idx ? { ...it, amount: 1, unit: 'tsp' } : it))}
                               className="px-2 py-0.5 rounded-lg bg-neutral-200/80 dark:bg-neutral-800 hover:bg-neutral-300 text-slate-600 dark:text-neutral-300 font-mono text-[9px] font-bold cursor-pointer"
                             >
                               1 ຊ້ອນຊາ (5g)
@@ -813,9 +951,7 @@ export default function Inventory() {
 
                             <button
                               type="button"
-                              onClick={() => {
-                                setRecipeIngredients(prev => prev.map((it, i) => i === idx ? { ...it, amount: 1, unit: 'tbsp' } : it));
-                              }}
+                              onClick={() => setRecipeIngredients(prev => prev.map((it, i) => i === idx ? { ...it, amount: 1, unit: 'tbsp' } : it))}
                               className="px-2 py-0.5 rounded-lg bg-neutral-200/80 dark:bg-neutral-800 hover:bg-neutral-300 text-slate-600 dark:text-neutral-300 font-mono text-[9px] font-bold cursor-pointer"
                             >
                               1 ຊ້ອນໂຕະ (15g)
@@ -828,27 +964,26 @@ export default function Inventory() {
                   </div>
                 </div>
 
-                {/* ສະຫຼຸບຕົ້ນທຶນລວມຕໍ່ 1 ຈອກ/ຊິ້ນ */}
-                <div className="p-3.5 rounded-2xl bg-neutral-100 dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 flex justify-between items-center font-mono">
-                  <div>
-                    <span className="text-[9px] font-black uppercase text-slate-400 block">ຕົ້ນທຶນຕົວຈິງລວມຕໍ່ 1 ໜ່ວຍ (ຈອກ/ຊິ້ນ)</span>
-                    <span className="text-[10px] text-slate-500">
-                      ວັດຖຸດິບ + ຄ່ານ້ຳ-ຄ່າໄຟ ({Number(overheadCost).toLocaleString()}₭)
+                {/* 🌟 4. LIVE PRICING & PROFIT BREAKDOWN CARD IN MODAL */}
+                <div className="p-4 rounded-2xl bg-neutral-100 dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 space-y-2 font-mono">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-slate-500">ຕົ້ນທຶນວັດຖຸດິບ (Raw Cost):</span>
+                    <span>{Math.round(currentModalCalculation.rawCost).toLocaleString()} ₭</span>
+                  </div>
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-slate-500">+ ຕົ້ນທຶນດຳເນີນງານ (Overhead):</span>
+                    <span>+{Math.round(currentModalCalculation.overhead).toLocaleString()} ₭</span>
+                  </div>
+                  <div className="flex justify-between items-center text-xs font-bold border-t border-slate-200 dark:border-neutral-800 pt-1.5">
+                    <span>= ຕົ້ນທຶນຕົວຈິງລວມ:</span>
+                    <span className="text-slate-900 dark:text-white">{Math.round(currentModalCalculation.totalCost).toLocaleString()} ₭</span>
+                  </div>
+                  <div className="flex justify-between items-center text-sm font-black border-t border-slate-200 dark:border-neutral-800 pt-1.5">
+                    <span className="text-emerald-600 dark:text-emerald-400">ກຳໄລສຸດທິຄາດຄະເນ (Net Profit):</span>
+                    <span className={currentModalCalculation.netProfit >= 0 ? 'text-emerald-500' : 'text-rose-500'}>
+                      +{Math.round(currentModalCalculation.netProfit).toLocaleString()} ₭ ({currentModalCalculation.margin.toFixed(1)}%)
                     </span>
                   </div>
-                  <span className="text-xl font-serif font-black text-emerald-500">
-                    {Math.round(
-                      recipesWithCalculatedCosts.find(r => r.menuName === menuName)?.totalCostPerCup ||
-                      (recipeIngredients.reduce((s, it) => {
-                        const amt = Number(it.amount) || 0;
-                        const u = (it.unit || 'g').toLowerCase();
-                        let bUnits = amt;
-                        if (u === 'tsp' || u === 'ຊ້ອນຊາ') bUnits = amt * 5;
-                        else if (u === 'tbsp' || u === 'ຊ້ອນໂຕະ') bUnits = amt * 15;
-                        return s + (bUnits * (it.unitCostLAK || 0));
-                      }, 0) + Number(overheadCost || 0))
-                    ).toLocaleString()} ₭
-                  </span>
                 </div>
 
                 <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-neutral-800">
@@ -864,7 +999,7 @@ export default function Inventory() {
                     disabled={isSavingRecipe}
                     className="crystal-button"
                   >
-                    {isSavingRecipe ? 'ກຳລັງບັນທຶກ...' : 'ບັນທຶກສູດ'}
+                    {isSavingRecipe ? 'ກຳລັງບັນທຶກ...' : 'ບັນທຶກສູດ & ການຕັ້ງລາຄາ'}
                   </button>
                 </div>
               </form>
