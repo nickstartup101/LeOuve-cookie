@@ -8,7 +8,7 @@ import { useTranslation } from 'react-i18next';
 import { 
   BookOpen, Plus, Trash2, Edit2, Calendar, 
   Package, ShoppingCart, Layers, Zap, Utensils, FileText,
-  DollarSign, TrendingUp, Sparkles, Tag, Upload, X, Receipt, Printer, CheckCircle2, QrCode
+  DollarSign, TrendingUp, Sparkles, Tag, Upload, X, Receipt, Printer, CheckCircle2
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -99,7 +99,7 @@ interface RecipeIngredientRow {
 
 export default function Inventory() {
   const { i18n } = useTranslation();
-  const [subTab, setSubTab] = useState<'recipes' | 'sales' | 'balances'>('sales');
+  const [subTab, setSubTab] = useState<'sales' | 'recipes' | 'balances'>('sales');
   
   const [products, setProducts] = useState<any[]>([]);
   const [supplierPrices, setSupplierPrices] = useState<any[]>([]);
@@ -125,7 +125,7 @@ export default function Inventory() {
   const [quantitiesSold, setQuantitiesSold] = useState<{ [recipeId: string]: number }>({});
   const [isDeducting, setIsDeducting] = useState(false);
 
-  // 🌟 COMBINED DAILY SALES POS RECEIPT STATE (ບິນ POS ລວມທຸກເມນູ)
+  // COMBINED POS RECEIPT STATE
   const [isCombinedBillOpen, setIsCombinedBillOpen] = useState(false);
   const [combinedBillData, setCombinedBillData] = useState<{
     date: string;
@@ -137,8 +137,6 @@ export default function Inventory() {
     billNo: string;
   } | null>(null);
 
-  const printBillRef = useRef<HTMLDivElement>(null);
-
   useEffect(() => {
     const unsubP = onSnapshot(query(collection(db, 'products')), snap => setProducts(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
     const unsubS = onSnapshot(query(collection(db, 'supplierPrices')), snap => setSupplierPrices(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
@@ -148,7 +146,6 @@ export default function Inventory() {
     return () => { unsubP(); unsubS(); unsubR(); unsubSales(); unsubAdj(); };
   }, []);
 
-  // Pre-fill quantitiesSold when date shifts
   useEffect(() => {
     const existingRec = salesRecords.find(r => r.date === selectedDate);
     if (existingRec && existingRec.itemsSold) {
@@ -198,7 +195,22 @@ export default function Inventory() {
           supplier: sp.supplier,
           unit: sp.unit || pr?.unit || 'g',
           packSize,
-          unitCostLAK
+          unitCostLAK: isNaN(unitCostLAK) ? 0 : unitCostLAK
+        });
+      }
+    });
+
+    // Fallback: Add products that don't have supplier quotes yet
+    products.forEach(pr => {
+      const exists = Array.from(map.values()).some(o => o.productId === pr.id);
+      if (!exists) {
+        map.set(`${pr.id}_default`, {
+          productId: pr.id,
+          name: pr.name,
+          supplier: 'Default',
+          unit: pr.unit || 'g',
+          packSize: pr.packSize || 1000,
+          unitCostLAK: 0
         });
       }
     });
@@ -213,10 +225,18 @@ export default function Inventory() {
       const yieldCount = Math.max(1, Number(recipe.batchYield) || 1);
 
       const parsedIngredients = (recipe.ingredients || []).map((ing: any) => {
+        if (!ing) return null;
         const pr = products.find(p => p.id === ing.productId);
-        const unitCost = ing.unitCostLAK || 0;
+        
+        // Lookup cost from supplier quote if not stored on ingredient
+        let unitCost = Number(ing.unitCostLAK) || 0;
+        if (unitCost === 0 && ing.productId) {
+          const matchedOpt = supplierProductOptions.find(o => o.productId === ing.productId);
+          if (matchedOpt) unitCost = matchedOpt.unitCostLAK;
+        }
+
         const amt = Number(ing.amount) || 0;
-        const u = (ing.unit || pr?.unit || 'g').toLowerCase();
+        const u = String(ing.unit || pr?.unit || 'g').toLowerCase().trim();
 
         let baseUnits = amt;
         if (u === 'tsp' || u === 'ຊ້ອນຊາ') baseUnits = amt * 5;
@@ -234,7 +254,7 @@ export default function Inventory() {
           costForBatch,
           costPerUnit: costForBatch / yieldCount
         };
-      });
+      }).filter(Boolean);
 
       const overhead = Number(recipe.overheadCost) || 0;
       const rawCostPerUnit = totalBatchRawCost / yieldCount;
@@ -259,7 +279,7 @@ export default function Inventory() {
         note: recipe.note || ''
       };
     });
-  }, [recipes, products]);
+  }, [recipes, products, supplierProductOptions]);
 
   // Inventory Balances with Yield-Based Consumption
   const inventoryBalances = useMemo(() => {
@@ -278,10 +298,10 @@ export default function Inventory() {
           const recipe = recipes.find(r => r.id === recipeId);
           if (recipe) {
             const yieldCount = Math.max(1, Number(recipe.batchYield) || 1);
-            const ing = (recipe.ingredients || []).find((i: any) => i.productId === p.id);
+            const ing = (recipe.ingredients || []).find((i: any) => i && i.productId === p.id);
             if (ing) {
               const amt = Number(ing.amount) || 0;
-              const u = (ing.unit || p.unit || 'g').toLowerCase();
+              const u = String(ing.unit || p.unit || 'g').toLowerCase().trim();
               let baseUnits = amt;
               if (u === 'tsp' || u === 'ຊ້ອນຊາ') baseUnits = amt * 5;
               else if (u === 'tbsp' || u === 'ຊ້ອນໂຕະ') baseUnits = amt * 15;
@@ -305,9 +325,95 @@ export default function Inventory() {
     });
   }, [products, supplierPrices, salesRecords, recipes, adjustments]);
 
-  // 🚀 CORE HANDLER: COMMIT & DEDUCT STOCK ALL ➔ ສ້າງໃບບິນ POS ລວມ + RESET ເປັນ 0
+  // Save Recipe
+  const handleSaveRecipe = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!menuName.trim() || recipeIngredients.length === 0) {
+      alert("ກະລຸນາໃສ່ຊື່ເມນູ ແລະ ເລືອກວັດຖຸດິບຢ່າງໜ້ອຍ 1 ລາຍການ");
+      return;
+    }
+
+    try {
+      setIsSavingRecipe(true);
+      const payloadIngredients = recipeIngredients
+        .filter(it => it.productId && Number(it.amount) > 0)
+        .map(it => ({
+          productId: it.productId,
+          name: it.name || '',
+          supplier: it.supplier || '',
+          amount: parseFloat(String(it.amount)) || 0,
+          unit: it.unit || 'g',
+          packSize: Number(it.packSize) || 1000,
+          unitCostLAK: Number(it.unitCostLAK) || 0
+        }));
+
+      const recipePayload = {
+        menuName: menuName.trim(),
+        batchYield: Math.max(1, Number(batchYield) || 1),
+        overheadCost: Number(overheadCost) || 0,
+        sellingPrice: Number(sellingPrice) || 0,
+        recipeImage: recipeImage || '',
+        pricingNote: (pricingNote || '').trim(),
+        note: (note || '').trim(),
+        ingredients: payloadIngredients,
+        updatedAt: serverTimestamp()
+      };
+
+      if (editingRecipe) {
+        await setDoc(doc(db, 'recipes', editingRecipe.id), recipePayload, { merge: true });
+      } else {
+        await addDoc(collection(db, 'recipes'), recipePayload);
+      }
+
+      setIsRecipeModalOpen(false);
+      setEditingRecipe(null);
+      setMenuName('');
+      setBatchYield(10);
+      setOverheadCost(1500);
+      setSellingPrice(25000);
+      setRecipeImage('');
+      setPricingNote('');
+      setNote('');
+      setRecipeIngredients([]);
+      alert("ບັນທຶກສູດສຳເລັດແລ້ວ!");
+    } finally {
+      setIsSavingRecipe(false);
+    }
+  };
+
+  // 🌟 Live Modal Cost Calculation with Fallbacks
+  const currentModalCalc = useMemo(() => {
+    const totalBatchRaw = recipeIngredients.reduce((s, it) => {
+      const amt = Number(it.amount) || 0;
+      const u = String(it.unit || 'g').toLowerCase().trim();
+      let baseUnits = amt;
+      if (u === 'tsp' || u === 'ຊ້ອນຊາ') baseUnits = amt * 5;
+      else if (u === 'tbsp' || u === 'ຊ້ອນໂຕະ') baseUnits = amt * 15;
+      return s + (baseUnits * (Number(it.unitCostLAK) || 0));
+    }, 0);
+
+    const yieldCount = Math.max(1, Number(batchYield) || 1);
+    const rawPerUnit = totalBatchRaw / yieldCount;
+    const overhead = Number(overheadCost) || 0;
+    const totalCostPerUnit = rawPerUnit + overhead;
+    const price = Number(sellingPrice) || 0;
+    const netProfit = price > 0 ? price - totalCostPerUnit : 0;
+    const margin = price > 0 ? (netProfit / price) * 100 : 0;
+
+    return { 
+      totalBatchRaw: isNaN(totalBatchRaw) ? 0 : totalBatchRaw, 
+      yieldCount, 
+      rawPerUnit: isNaN(rawPerUnit) ? 0 : rawPerUnit, 
+      overhead, 
+      totalCostPerUnit: isNaN(totalCostPerUnit) ? 0 : totalCostPerUnit, 
+      price, 
+      netProfit: isNaN(netProfit) ? 0 : netProfit, 
+      margin: isNaN(margin) ? 0 : margin 
+    };
+  }, [recipeIngredients, batchYield, overheadCost, sellingPrice]);
+
+  // COMMIT & DEDUCT
   const handleCommitAndDeductAll = async () => {
-    // 1. ກັ່ນຕອງສະເພາະເມນູທີ່ມີການຂາຍ > 0
     const activeSoldItems = recipesWithCalculatedCosts
       .filter(r => (quantitiesSold[r.id] || 0) > 0)
       .map(r => {
@@ -331,20 +437,17 @@ export default function Inventory() {
 
     setIsDeducting(true);
     try {
-      // 2. ບັນທຶກລົງ menu_sales ເພື່ອຕັດສະຕັອກ
       await setDoc(doc(db, 'menu_sales', selectedDate), {
         date: selectedDate,
         itemsSold: quantitiesSold,
         updatedAt: serverTimestamp()
       }, { merge: true });
 
-      // 3. ຄິດໄລ່ຍອດລວມທັງໝົດຂອງໃບບິນ
       const totalRevenue = activeSoldItems.reduce((sum, it) => sum + it.lineRevenue, 0);
       const totalCost = activeSoldItems.reduce((sum, it) => sum + it.lineCost, 0);
       const totalProfit = activeSoldItems.reduce((sum, it) => sum + it.lineProfit, 0);
       const totalQty = activeSoldItems.reduce((sum, it) => sum + it.soldQty, 0);
 
-      // 4. ສົ່ງລາຍຮັບເຂົ້າບັນຊີ Finance (Transactions) ອັດຕະໂນມັດ
       if (totalRevenue > 0) {
         await addDoc(collection(db, 'transactions'), {
           type: 'income',
@@ -358,7 +461,6 @@ export default function Inventory() {
         });
       }
 
-      // 5. ເປີດໃບບິນ POS ລວມ (Virtual Bill) ຂຶ້ນມາສະແດງທັນທີ
       const randomBillNo = `POS-${selectedDate.replace(/-/g, '')}-${Math.floor(1000 + Math.random() * 9000)}`;
       setCombinedBillData({
         date: selectedDate,
@@ -371,20 +473,14 @@ export default function Inventory() {
       });
       setIsCombinedBillOpen(true);
 
-      // 🌟 6. ຣີເຊັດຕົວເລກ + / - ກັບມາເປັນ 0 ທັງໝົດຕາມທີ່ທ່ານຕ້ອງການ!
       const resetMap: { [id: string]: number } = {};
       recipes.forEach(rec => { resetMap[rec.id] = 0; });
       setQuantitiesSold(resetMap);
-
     } catch (e: any) {
       alert("Error committing sales: " + e.message);
     } finally {
       setIsDeducting(false);
     }
-  };
-
-  const handlePrintReceipt = () => {
-    window.print();
   };
 
   return (
@@ -449,7 +545,7 @@ export default function Inventory() {
         </button>
       </div>
 
-      {/* 🌟 TAB 1: DAILY SALES & MENU CARDS */}
+      {/* TAB 1: DAILY SALES */}
       {subTab === 'sales' && (
         <div className="space-y-6">
           <div className="high-density-card p-6 flex flex-col sm:flex-row justify-between sm:items-center gap-4">
@@ -477,7 +573,6 @@ export default function Inventory() {
               return (
                 <div key={rec.id} className="high-density-card p-5 space-y-4 flex flex-col justify-between">
                   <div>
-                    {/* Header: Photo + Name */}
                     <div className="flex items-center gap-3">
                       {rec.recipeImage ? (
                         <img src={rec.recipeImage} alt={rec.menuName} className="w-14 h-14 rounded-2xl object-cover border border-neutral-700 shrink-0" />
@@ -495,7 +590,6 @@ export default function Inventory() {
                       </div>
                     </div>
 
-                    {/* Sales Input Counter (+ / -) */}
                     <div className="mt-4 p-3 rounded-2xl bg-slate-50 dark:bg-[#1a1a1a] flex items-center justify-between">
                       <span className="text-xs font-bold text-slate-700 dark:text-neutral-300">ຍອດຂາຍມື້ນີ້:</span>
                       <div className="flex items-center gap-2">
@@ -521,7 +615,6 @@ export default function Inventory() {
                       </div>
                     </div>
 
-                    {/* Live Row Output */}
                     {qtySold > 0 && (
                       <div className="mt-2 text-xs font-mono space-y-0.5 pt-1">
                         <div className="flex justify-between text-slate-500">
@@ -540,7 +633,6 @@ export default function Inventory() {
             })}
           </div>
 
-          {/* 🌟 ປຸ່ມ COMMIT: ກົດແລ້ວອອກບິນ POS ລວມທຸກເມນູ + ຣີເຊັດຕົວເລກເປັນ 0 */}
           <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 pt-4 border-t border-slate-100 dark:border-neutral-800">
             <div>
               <p className="text-xs font-bold text-slate-800 dark:text-white">
@@ -622,37 +714,62 @@ export default function Inventory() {
                     <p className="text-slate-600 dark:text-neutral-300 font-light mt-0.5">{recipe.pricingNote}</p>
                   </div>
                 )}
+                {recipe.note && (
+                  <div className="mt-2 p-3 rounded-2xl bg-amber-500/5 dark:bg-amber-500/10 border border-amber-500/15 text-xs">
+                    <span className="text-[9px] font-bold uppercase text-amber-600 dark:text-amber-400 block">📝 Note ວິທີເຮັດ:</span>
+                    <p className="text-slate-600 dark:text-neutral-300 font-light mt-0.5">{recipe.note}</p>
+                  </div>
+                )}
               </div>
 
+              {/* 🌟 ປຸ່ມ EDIT ທີ່ໄດ້ຮັບການແກ້ໄຂ ບໍ່ໃຫ້ເກີດຈໍຂາວ 100% */}
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-neutral-800">
                 <button
                   onClick={() => {
                     setEditingRecipe(recipe);
-                    setMenuName(recipe.menuName);
+                    setMenuName(recipe.menuName || '');
                     setBatchYield(recipe.batchYield || 10);
                     setOverheadCost(recipe.overheadCost || 1500);
                     setSellingPrice(recipe.sellingPrice || 25000);
                     setRecipeImage(recipe.recipeImage || '');
                     setPricingNote(recipe.pricingNote || '');
                     setNote(recipe.note || '');
-                    setRecipeIngredients((recipe.ingredients || []).map((ing: any) => ({
-                      productId: ing.productId,
-                      name: ing.name,
-                      supplier: ing.supplier || '',
-                      amount: ing.amount,
-                      unit: ing.unit || 'g',
-                      packSize: ing.packSize || 1000,
-                      unitCostLAK: ing.unitCostLAK || 0
-                    })));
+                    
+                    // ✨ ປັບປຸງ Fallbacks: ປ້ອງກັນຄ່າ Null / Undefined ບໍ່ໃຫ້ Error
+                    const safeIngredients = (recipe.ingredients || []).map((ing: any) => {
+                      if (!ing) return null;
+                      const pr = products.find(p => p.id === ing.productId);
+                      let uCost = Number(ing.unitCostLAK) || 0;
+                      if (uCost === 0 && ing.productId) {
+                        const mOpt = supplierProductOptions.find(o => o.productId === ing.productId);
+                        if (mOpt) uCost = mOpt.unitCostLAK;
+                      }
+
+                      return {
+                        productId: ing.productId || '',
+                        name: ing.name || pr?.name || '',
+                        supplier: ing.supplier || '',
+                        amount: ing.amount !== undefined ? ing.amount : '',
+                        unit: ing.unit || pr?.unit || 'g',
+                        packSize: ing.packSize || pr?.packSize || 1000,
+                        unitCostLAK: uCost
+                      };
+                    }).filter(Boolean);
+
+                    setRecipeIngredients(safeIngredients.length > 0 ? safeIngredients : [
+                      { productId: '', name: '', supplier: '', amount: '', unit: 'g', packSize: 1000, unitCostLAK: 0 }
+                    ]);
                     setIsRecipeModalOpen(true);
                   }}
                   className="p-2 text-slate-400 hover:text-sky-500 rounded-lg cursor-pointer"
+                  title="ແກ້ໄຂສູດ"
                 >
                   <Edit2 className="w-4 h-4" />
                 </button>
                 <button
                   onClick={() => deleteDoc(doc(db, 'recipes', recipe.id))}
                   className="p-2 text-slate-400 hover:text-rose-500 rounded-lg cursor-pointer"
+                  title="ລຶບສູດ"
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
@@ -688,11 +805,11 @@ export default function Inventory() {
                   return (
                     <tr key={item.id} className="hover:bg-slate-50/50 dark:hover:bg-neutral-800/30">
                       <td className="p-3 font-bold text-slate-800 dark:text-white">
-                        <div className="flex items-center gap-2.5">
+                        <div className="flex items-center gap-2">
                           {item.productImage ? (
-                            <img src={item.productImage} alt={item.name} className="w-9 h-9 rounded-xl object-cover border border-neutral-700" />
+                            <img src={item.productImage} alt={item.name} className="w-8 h-8 rounded-lg object-cover border border-neutral-700" />
                           ) : (
-                            <div className="w-9 h-9 rounded-xl bg-neutral-200 dark:bg-neutral-800 flex items-center justify-center text-slate-400">
+                            <div className="w-8 h-8 rounded-lg bg-neutral-200 dark:bg-neutral-800 flex items-center justify-center text-slate-400">
                               <Package className="w-4 h-4" />
                             </div>
                           )}
@@ -722,7 +839,7 @@ export default function Inventory() {
         </div>
       )}
 
-      {/* 🌟 ໃບບິນ POS ລວມທຸກເມນູ (COMBINED POS SALES RECEIPT WITH PRODUCT PHOTOS) */}
+      {/* 🌟 ໃບບິນ POS ລວມທຸກເມນູ */}
       <AnimatePresence>
         {isCombinedBillOpen && combinedBillData && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setIsCombinedBillOpen(false)}>
@@ -732,9 +849,7 @@ export default function Inventory() {
               className="bg-[#faf7f0] text-slate-800 w-full max-w-md rounded-3xl p-6 shadow-2xl relative border-t-8 border-dashed border-[#052659] max-h-[92vh] overflow-y-auto"
               style={{ fontFamily: "'Courier New', Courier, monospace" }}
               onClick={e => e.stopPropagation()}
-              ref={printBillRef}
             >
-              {/* Close Button */}
               <button 
                 onClick={() => setIsCombinedBillOpen(false)} 
                 className="absolute top-4 right-4 p-1.5 rounded-full bg-slate-200/60 hover:bg-slate-300 text-slate-600 cursor-pointer"
@@ -742,7 +857,6 @@ export default function Inventory() {
                 <X className="w-4 h-4" />
               </button>
 
-              {/* Receipt Header */}
               <div className="text-center space-y-1 border-b border-dashed border-slate-300 pb-3">
                 <h2 className="text-xl font-serif font-black uppercase text-slate-900 tracking-tight">
                   LE OUVE WORKSPACE
@@ -757,7 +871,6 @@ export default function Inventory() {
                 </div>
               </div>
 
-              {/* Consolidated Line Items with Photos */}
               <div className="py-3 space-y-2.5 border-b border-dashed border-slate-300">
                 <div className="text-[10px] font-bold text-slate-400 flex justify-between pb-1 border-b border-dotted border-slate-200 uppercase">
                   <span>MENU ITEM</span>
@@ -767,7 +880,6 @@ export default function Inventory() {
 
                 {combinedBillData.items.map((it, idx) => (
                   <div key={idx} className="flex items-center gap-2.5 py-1">
-                    {/* 📸 ຮູບສິນຄ້າຕິດໄປໃນໃບບິນ POS */}
                     {it.recipeImage ? (
                       <img src={it.recipeImage} alt={it.menuName} className="w-9 h-9 rounded-lg object-cover border border-slate-300 shrink-0" />
                     ) : (
@@ -790,7 +902,6 @@ export default function Inventory() {
                 ))}
               </div>
 
-              {/* Totals Calculation */}
               <div className="py-3 space-y-1.5 text-xs font-mono border-b border-dashed border-slate-300">
                 <div className="flex justify-between text-slate-600">
                   <span>ຈຳນວນລາຍການລວມ:</span>
@@ -810,7 +921,6 @@ export default function Inventory() {
                 </div>
               </div>
 
-              {/* Footer */}
               <div className="text-center pt-3 space-y-2">
                 <div className="flex items-center justify-center gap-1.5 text-emerald-600 text-xs font-bold">
                   <CheckCircle2 className="w-4 h-4" />
@@ -820,10 +930,9 @@ export default function Inventory() {
                   THANK YOU FOR SUPPORTING LE OUVE
                 </p>
 
-                {/* Print Button */}
                 <div className="pt-2 flex gap-2">
                   <button
-                    onClick={handlePrintReceipt}
+                    onClick={() => window.print()}
                     className="flex-1 py-2.5 rounded-xl bg-slate-900 hover:bg-black text-white font-sans text-xs font-bold flex items-center justify-center gap-2 cursor-pointer shadow-md"
                   >
                     <Printer className="w-3.5 h-3.5" />
@@ -843,7 +952,7 @@ export default function Inventory() {
         )}
       </AnimatePresence>
 
-      {/* MODAL: RECIPE BUILDER */}
+      {/* 🚀 MODAL: RECIPE BUILDER (ແກ້ໄຂ baseUnits ແລະ ປ້ອງກັນຈໍຂາວ 100%) */}
       <AnimatePresence>
         {isRecipeModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
@@ -895,7 +1004,7 @@ export default function Inventory() {
                   </div>
                 </div>
 
-                {/* 📸 ອັບໂຫຼດຮູບຕົວຢ່າງສິນຄ້າໃນແຕ່ລະສູດ */}
+                {/* ຮູບສິນຄ້າ */}
                 <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-[#1a1a1a] border border-slate-200 dark:border-neutral-800 space-y-1.5">
                   <label className="label-xs flex justify-between">
                     <span>ຮູບພາບຕົວຢ່າງສິນຄ້າ (Product Photo ທີ່ຈະໄປໂຊໃນໃບບິນ)</span>
@@ -904,7 +1013,10 @@ export default function Inventory() {
                   <div className="border border-dashed border-slate-300 dark:border-neutral-700 rounded-xl p-2.5 relative flex items-center justify-between">
                     <input type="file" accept="image/*" onChange={async (e) => {
                       const file = e.target.files?.[0];
-                      if (file) setRecipeImage(await compressImage(file));
+                      if (file) {
+                        const b64 = await compressImage(file);
+                        setRecipeImage(b64);
+                      }
                     }} className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" />
                     {recipeImage ? (
                       <div className="flex items-center gap-3 w-full justify-between">
@@ -996,11 +1108,13 @@ export default function Inventory() {
                     {recipeIngredients.map((ing, idx) => {
                       const currentVal = ing.productId ? `${ing.productId}_${ing.supplier || ''}` : '';
                       const amt = Number(ing.amount) || 0;
-                      const u = (ing.unit || 'g').toLowerCase();
-                      let bUnits = amt;
-                      if (u === 'tsp' || u === 'ຊ້ອນຊາ') bUnits = amt * 5;
+                      const u = String(ing.unit || 'g').toLowerCase().trim();
+                      
+                      // ✨ ແກ້ໄຂແລ້ວ: ປະກາດ baseUnits ໃຫ້ຊື່ກົງກັນ 100% ບໍ່ໃຫ້ ReferenceError
+                      let baseUnits = amt;
+                      if (u === 'tsp' || u === 'ຊ້ອນຊາ') baseUnits = amt * 5;
                       else if (u === 'tbsp' || u === 'ຊ້ອນໂຕະ') baseUnits = amt * 15;
-                      const itemTotalCost = bUnits * (ing.unitCostLAK || 0);
+                      const itemTotalCost = baseUnits * (Number(ing.unitCostLAK) || 0);
 
                       return (
                         <div key={idx} className="p-3.5 rounded-2xl bg-slate-50 dark:bg-[#1a1a1a] border border-slate-200/70 dark:border-neutral-800 space-y-2.5">
@@ -1069,8 +1183,11 @@ export default function Inventory() {
                               </select>
                             </div>
 
+                            {/* ✨ ແກ້ໄຂແລ້ວ: baseUnits ມີໂຕຕົນແລ້ວ ບໍ່ຈໍຂາວແນ່ນອນ */}
                             <div className="sm:col-span-4 p-2 rounded-xl bg-slate-100 dark:bg-[#202020] text-right font-mono">
-                              <span className="text-[8px] text-slate-400 block uppercase">ຕົ້ນທຶນວັດຖຸດິບນີ້:</span>
+                              <span className="text-[8px] text-slate-400 block uppercase">
+                                ຕົ້ນທຶນ {u === 'tsp' || u === 'tbsp' ? `(≈${baseUnits}g)` : ''}:
+                              </span>
                               <span className="text-xs font-black text-emerald-500">
                                 ≈ {Math.round(itemTotalCost).toLocaleString()} ₭
                               </span>
