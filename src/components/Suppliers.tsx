@@ -6,12 +6,12 @@ import {
 } from 'firebase/firestore';
 import { 
   Plus, Trash2, Edit2, Save, X, Search, 
-  Receipt, Upload, Eye, Calculator, Package, ImageIcon, Check
+  Receipt, Upload, Eye, Calculator, Package, ImageIcon, Camera
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useTranslation } from 'react-i18next';
 
-// Helper ບີບອັດຮູບໃບບິນ
+// Helper ບີບອັດຮູບ
 const compressImage = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -58,7 +58,7 @@ export default function Suppliers() {
   const { i18n } = useTranslation();
   const [products, setProducts] = useState<any[]>([]);
   const [supplierPrices, setSupplierPrices] = useState<any[]>([]);
-  const [supplierList, setSupplierList] = useState<string[]>(['ລັກຂະນາແພກ', 'LATDA', 'CHANHOM', 'DMART', 'HEAVENLY']);
+  const [supplierList, setSupplierList] = useState<string[]>(['ລັກຂະນາແພກ', 'LATDA', 'CHANHOM', 'DMART', 'HEAVENLY', 'Makro']);
   const [filter, setFilter] = useState('');
 
   // 1. ຫົວໃບບິນ Batch Bill
@@ -77,7 +77,7 @@ export default function Suppliers() {
   const [saveLoading, setSaveLoading] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
-  // 📝 STATE ສຳລັບການແກ້ໄຂລາຍການ (EDIT RECORD)
+  // 📝 STATE ສຳລັບການແກ້ໄຂລາຍການ (EDIT RECORD & UPDATE PRODUCT PHOTO)
   const [editingItem, setEditingItem] = useState<any | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editPriceDisplay, setEditPriceDisplay] = useState('');
@@ -93,7 +93,6 @@ export default function Suppliers() {
     productImage: ''
   });
 
-  // In-App Popups (ລຶບ/ແຈ້ງເຕືອນ/ເພີ່ມຮ້ານ)
   const [appModal, setAppModal] = useState<{
     isOpen: boolean;
     title: string;
@@ -115,7 +114,7 @@ export default function Suppliers() {
     return () => { unsubP(); unsubS(); };
   }, []);
 
-  // Ctrl+V Paste Receipt
+  // Ctrl+V Paste
   useEffect(() => {
     const handlePaste = async (e: ClipboardEvent) => {
       const items = e.clipboardData?.items;
@@ -126,7 +125,8 @@ export default function Suppliers() {
           if (file) {
             const base64 = await compressImage(file);
             if (isEditModalOpen && editingItem) {
-              setEditingItem((prev: any) => ({ ...prev, receiptImage: base64 }));
+              // ຖ້າເປີດ Modal ແກ້ໄຂ: ໃຫ້ default ໃສ່ຮູບສິນຄ້າ
+              setEditingItem((prev: any) => ({ ...prev, productImage: base64 }));
             } else if (isAddProductModalOpen) {
               setNewProductForm(prev => ({ ...prev, productImage: base64 }));
             } else {
@@ -237,23 +237,27 @@ export default function Suppliers() {
     }
   };
 
-  // 📝 ເປີດ Modal ແກ້ໄຂລາຍການ
+  // 📝 ເປີດ Modal ແກ້ໄຂ (ດຶງທັງຮູບໃບບິນ ແລະ ຮູບສິນຄ້າຈາກ products ມາພ້ອມກັນ)
   const handleOpenEditModal = (item: any) => {
     const rawVal = item.priceMode === 'total' 
       ? (item.totalPriceOriginal || item.priceOriginal * item.quantity)
       : item.priceOriginal;
 
+    // ດຶງຂໍ້ມູນສິນຄ້າຕົວຈິງຈາກ collection products
+    const associatedProduct = products.find(p => p.id === item.productId);
+
     setEditingItem({
       ...item,
       priceInput: rawVal,
       priceMode: item.priceMode || 'total',
-      exchangeRate: item.currency === 'LAK' ? 1 : (item.exchangeRate || 1)
+      exchangeRate: item.currency === 'LAK' ? 1 : (item.exchangeRate || 1),
+      productImage: associatedProduct?.productImage || '' // ✨ ດຶງຮູບສິນຄ້າທີ່ມີຢູ່ມາໂຊ
     });
     setEditPriceDisplay(Number(rawVal).toLocaleString());
     setIsEditModalOpen(true);
   };
 
-  // 💾 ບັນທຶກການແກ້ໄຂລົງ Firestore
+  // 💾 ບັນທຶກການແກ້ໄຂ (ອັບເດດທັງ supplierPrices ແລະ ອັບເດດຮູບສິນຄ້າລົງ products)
   const handleSaveEditedItem = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingItem) return;
@@ -269,6 +273,7 @@ export default function Suppliers() {
       const totalOriginal = editingItem.priceMode === 'total' ? rawPrice : rawPrice * qty;
       const totalPriceLAK = totalOriginal * rate;
 
+      // 1. ອັບເດດລາຍການຊື້ໃນ supplierPrices
       await updateDoc(doc(db, 'supplierPrices', editingItem.id), {
         productId: editingItem.productId,
         supplier: editingItem.supplier,
@@ -289,9 +294,24 @@ export default function Suppliers() {
         updatedAt: serverTimestamp()
       });
 
+      // 2. ✨ ສຳຄັນທີ່ສຸດ: ອັບເດດຮູບສິນຄ້າ (productImage) ລົງໃນ collection `products`!
+      if (editingItem.productId) {
+        await updateDoc(doc(db, 'products', editingItem.productId), {
+          productImage: editingItem.productImage || '',
+          unit: editingItem.unit || 'g',
+          packSize: Number(editingItem.quantityPerUnit) || 1000,
+          updatedAt: serverTimestamp()
+        });
+      }
+
       setIsEditModalOpen(false);
       setEditingItem(null);
-      setAppModal({ isOpen: true, title: 'ສຳເລັດ', type: 'alert', data: 'ປັບປຸງຂໍ້ມູນລາຄາສຳເລັດແລ້ວ!' });
+      setAppModal({ 
+        isOpen: true, 
+        title: 'ສຳເລັດ', 
+        type: 'alert', 
+        data: 'ປັບປຸງຂໍ້ມູນລາຄາ ແລະ ຮູບພາບສິນຄ້າສຳເລັດແລ້ວ!' 
+      });
     } finally {
       setSaveLoading(false);
     }
@@ -303,7 +323,7 @@ export default function Suppliers() {
     if (!newProductForm.name.trim()) return;
 
     try {
-      const docRef = await addDoc(collection(db, 'products'), {
+      await addDoc(collection(db, 'products'), {
         name: newProductForm.name.trim(),
         categoryType: newProductForm.categoryType,
         unit: newProductForm.unit || 'g',
@@ -342,7 +362,7 @@ export default function Suppliers() {
             Supplier Quotes & Batch Invoices
           </h1>
           <p className="text-xs text-slate-400 mt-0.5">
-            ບັນທຶກ, ແກ້ໄຂ ແລະ ລຶບໃບບິນຊື້ເຄື່ອງຈາກ Supplier ພ້ອມຄິດໄລ່ຕົ້ນທຶນຕົວຈິງ
+            ບັນທຶກ, ແກ້ໄຂ ແລະ ອັບໂຫຼດຮູບສິນຄ້າ & ຮູບໃບບິນຊື້ເຄື່ອງ
           </p>
         </div>
 
@@ -490,8 +510,16 @@ export default function Suppliers() {
                         {idx + 1}
                       </span>
 
-                      {/* ເລືອກສິນຄ້າ */}
-                      <div className="flex-1">
+                      {/* ເລືອກສິນຄ້າ ພ້ອມໄອຄອນຮູບ */}
+                      <div className="flex-1 flex items-center gap-2">
+                        {prod?.productImage ? (
+                          <img src={prod.productImage} alt={prod.name} className="w-8 h-8 rounded-lg object-cover border border-neutral-700 shrink-0" />
+                        ) : (
+                          <div className="w-8 h-8 rounded-lg bg-neutral-200 dark:bg-neutral-800 flex items-center justify-center text-slate-400 shrink-0">
+                            <Package className="w-4 h-4" />
+                          </div>
+                        )}
+
                         <select
                           value={item.productId}
                           onChange={e => {
@@ -648,12 +676,12 @@ export default function Suppliers() {
         </form>
       </div>
 
-      {/* 📋 ຕາຕະລາງປະຫວັດລາຄາ & ປຸ່ມແກ້ໄຂ / ລຶບ (ໃຊ້ໄອຄອນ Lucide-React 100%) */}
+      {/* 📋 ຕາຕະລາງປະຫວັດລາຄາ & ປຸ່ມແກ້ໄຂ / ລຶບ */}
       <div className="high-density-card p-6 overflow-hidden">
         <div className="flex justify-between items-center border-b border-slate-100 dark:border-neutral-800 pb-3 mb-4">
           <div>
             <h3 className="text-sm font-serif text-slate-800 dark:text-white">ປະຫວັດລາຄາ & ໃບບິນທັງໝົດ</h3>
-            <p className="text-xs text-slate-400">ສາມາດກົດໄອຄອນສໍເພື່ອແກ້ໄຂ ຫຼື ໄອຄອນຖັງຂີ້ເຫຍື້ອເພື່ອລຶບ</p>
+            <p className="text-xs text-slate-400">ກົດປຸ່ມສໍເພື່ອແກ້ໄຂລາຄາ ຫຼື ອັບໂຫຼດຮູບສິນຄ້າຕົວຈິງ</p>
           </div>
           <input
             type="text"
@@ -691,8 +719,13 @@ export default function Suppliers() {
                       <td className="p-3 font-mono text-slate-400">{item.date}</td>
                       <td className="p-3 font-bold text-slate-800 dark:text-white">
                         <div className="flex items-center gap-2">
-                          {prod?.productImage && (
-                            <img src={prod.productImage} alt={prod.name} className="w-7 h-7 rounded-lg object-cover border border-neutral-700 shrink-0" />
+                          {/* 🖼️ ຮູບສິນຄ້າ (ຖ້າມີຈະໂຊຮູບ, ຖ້າບໍ່ມີຈະເປັນໄອຄອນກ່ອງ) */}
+                          {prod?.productImage ? (
+                            <img src={prod.productImage} alt={prod.name} className="w-8 h-8 rounded-lg object-cover border border-neutral-700 shrink-0" />
+                          ) : (
+                            <div className="w-8 h-8 rounded-lg bg-neutral-200 dark:bg-neutral-800 flex items-center justify-center text-slate-400 shrink-0">
+                              <Package className="w-4 h-4" />
+                            </div>
                           )}
                           <div>
                             <span>{prod?.name || 'Item'}</span>
@@ -715,13 +748,13 @@ export default function Suppliers() {
                         ) : <span className="text-slate-500">-</span>}
                       </td>
 
-                      {/* 🛠️ ປຸ່ມແກ້ໄຂ (Edit2) ແລະ ປຸ່ມລຶບ (Trash2) ຈາກ Lucide-React */}
+                      {/* 🛠️ ປຸ່ມແກ້ໄຂ (Edit2) ແລະ ປຸ່ມລຶບ (Trash2) */}
                       <td className="p-3 text-center">
                         <div className="flex items-center justify-center gap-1.5">
                           <button 
                             onClick={() => handleOpenEditModal(item)} 
                             className="p-1.5 text-slate-400 hover:text-sky-500 hover:bg-sky-500/10 rounded-lg cursor-pointer transition-colors"
-                            title="ແກ້ໄຂລາຍການ"
+                            title="ແກ້ໄຂລາຄາ & ອັບໂຫຼດຮູບສິນຄ້າ"
                           >
                             <Edit2 className="w-3.5 h-3.5" />
                           </button>
@@ -742,15 +775,20 @@ export default function Suppliers() {
         </div>
       </div>
 
-      {/* 📝 MODAL ແກ້ໄຂລາຍການ SUPPLIER (IN-APP EDIT DIALOG) */}
+      {/* 📝 MODAL ແກ້ໄຂ: ຮອງຮັບທັງການປັບລາຄາ ແລະ ອັບໂຫຼດ "ຮູບສິນຄ້າຕົວຈິງ" */}
       {isEditModalOpen && editingItem && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm" onClick={() => setIsEditModalOpen(false)}>
           <div className="bg-white dark:bg-[#141414] rounded-3xl p-6 border border-slate-200 dark:border-neutral-800 max-w-lg w-full space-y-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center border-b border-slate-100 dark:border-neutral-800 pb-3">
-              <h3 className="text-base font-serif text-slate-800 dark:text-white flex items-center gap-2">
-                <Edit2 className="w-4 h-4 text-sky-500" />
-                <span>ແກ້ໄຂລາຍການລາຄາ Supplier</span>
-              </h3>
+              <div>
+                <h3 className="text-base font-serif text-slate-800 dark:text-white flex items-center gap-2">
+                  <Edit2 className="w-4 h-4 text-sky-500" />
+                  <span>ແກ້ໄຂລາຍການລາຄາ & ອັບໂຫຼດຮູບສິນຄ້າ</span>
+                </h3>
+                <p className="text-[10px] text-slate-400 mt-0.5">
+                  ສາມາດອັບໂຫຼດຮູບສິນຄ້າຕົວຈິງໃສ່ບ່ອນນີ້ ເພື່ອໃຫ້ໄປສະແດງໃນຕາຕະລາງໄດ້
+                </p>
+              </div>
               <button onClick={() => setIsEditModalOpen(false)} className="text-slate-400 hover:text-white p-1">✕</button>
             </div>
 
@@ -764,7 +802,12 @@ export default function Suppliers() {
                   onChange={e => {
                     const pId = e.target.value;
                     const pr = products.find(p => p.id === pId);
-                    setEditingItem({ ...editingItem, productId: pId, unit: pr?.unit || editingItem.unit });
+                    setEditingItem({ 
+                      ...editingItem, 
+                      productId: pId, 
+                      unit: pr?.unit || editingItem.unit,
+                      productImage: pr?.productImage || '' 
+                    });
                   }}
                   className="crystal-input w-full font-bold cursor-pointer"
                 >
@@ -772,6 +815,42 @@ export default function Suppliers() {
                     <option key={p.id} value={p.id}>[{p.categoryType || 'COGS'}] {p.name}</option>
                   ))}
                 </select>
+              </div>
+
+              {/* ✨ 1. ຊ່ອງອັບໂຫຼດ "ຮູບພາບສິນຄ້າຕົວຈິງ (Product Photo)" ທີ່ທ່ານຕ້ອງການ! */}
+              <div className="p-3.5 rounded-2xl bg-sky-500/10 border border-sky-500/20 space-y-1.5">
+                <label className="label-xs !text-sky-500 flex justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <Camera className="w-3.5 h-3.5" />
+                    <span>ຮູບພາບສິນຄ້າຕົວຈິງ (Product Photo)</span>
+                  </span>
+                  <span className="font-bold text-[9px]">Ctrl+V ວາງໄດ້</span>
+                </label>
+
+                <div className="border border-dashed border-sky-500/30 rounded-xl p-2.5 relative flex items-center justify-between hover:bg-sky-500/5 transition-colors">
+                  <input type="file" accept="image/*" onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      const b64 = await compressImage(file);
+                      setEditingItem((prev: any) => ({ ...prev, productImage: b64 }));
+                    }
+                  }} className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" />
+                  
+                  {editingItem.productImage ? (
+                    <div className="flex items-center gap-3 w-full justify-between">
+                      <img src={editingItem.productImage} alt="Product" className="w-10 h-10 rounded-lg object-cover border border-sky-400 shadow-xs" />
+                      <div className="flex-1 min-w-0">
+                        <span className="text-xs font-bold text-sky-500 block truncate">ອັບໂຫຼດຮູບສິນຄ້າແລ້ວ ✓</span>
+                        <span className="text-[9px] text-slate-400 block">ຮູບນີ້ຈະໄປສະແດງໃນຕາຕະລາງ ແລະ ຄັງສາງ</span>
+                      </div>
+                      <button type="button" onClick={(e) => { e.stopPropagation(); setEditingItem((prev: any) => ({ ...prev, productImage: '' })); }} className="text-rose-500 p-1">✕</button>
+                    </div>
+                  ) : (
+                    <span className="text-xs text-sky-600 dark:text-sky-400 mx-auto flex items-center gap-1.5 font-bold">
+                      <Upload className="w-3.5 h-3.5" /> ຄລິກເລືອກຮູບສິນຄ້າ ຫຼື ກົດ Ctrl+V
+                    </span>
+                  )}
+                </div>
               </div>
 
               {/* ຮ້ານຄ້າ & ວັນທີ */}
@@ -888,11 +967,11 @@ export default function Suppliers() {
                 </div>
               </div>
 
-              {/* ຮູບໃບບິນ */}
+              {/* ✨ 2. ຊ່ອງອັບໂຫຼດ/ແກ້ໄຂ "ຮູບໃບບິນ (Receipt Attachment)" */}
               <div>
                 <label className="label-xs flex justify-between mb-1">
-                  <span>ຮູບໃບບິນ (Receipt Attachment)</span>
-                  <span className="text-emerald-500 font-bold text-[9px]">Ctrl+V ວາງໄດ້</span>
+                  <span>ຮູບພາບໃບບິນຊື້ເຄື່ອງ (Receipt Attachment)</span>
+                  <span className="text-emerald-500 font-bold text-[9px]">Ctrl+V</span>
                 </label>
                 <div className="border border-dashed border-slate-300 dark:border-neutral-700 rounded-xl p-2 relative flex items-center justify-between">
                   <input type="file" accept="image/*" onChange={async (e) => {
@@ -909,7 +988,7 @@ export default function Suppliers() {
                       <button type="button" onClick={(e) => { e.stopPropagation(); setEditingItem({ ...editingItem, receiptImage: '' }); }} className="text-rose-500 p-1">✕</button>
                     </div>
                   ) : (
-                    <span className="text-xs text-slate-400 mx-auto flex items-center gap-1.5"><Upload className="w-3.5 h-3.5" /> ຄລິກ ຫຼື ວາງຮູບ (Ctrl+V)</span>
+                    <span className="text-xs text-slate-400 mx-auto flex items-center gap-1.5"><Upload className="w-3.5 h-3.5" /> ຄລິກ ຫຼື ວາງຮູບໃບບິນ</span>
                   )}
                 </div>
               </div>
@@ -953,7 +1032,7 @@ export default function Suppliers() {
                 <input
                   type="text"
                   required
-                  placeholder="ເຊັ່ນ: ໄຊຣັບວານິລາ, ນົມສົດ, ຖາດໄມ້..."
+                  placeholder="ເຊັ່ນ: Mmilk, ໂຖແກ້ວ, ຖາດໂລ..."
                   value={newProductForm.name}
                   onChange={e => setNewProductForm({ ...newProductForm, name: e.target.value })}
                   className="crystal-input w-full !text-xs font-bold"
@@ -1012,6 +1091,37 @@ export default function Suppliers() {
                     className="crystal-input w-full font-mono font-bold text-center"
                     placeholder="1000"
                   />
+                </div>
+              </div>
+
+              {/* ຮູບພາບສິນຄ້າ */}
+              <div>
+                <label className="label-xs flex justify-between mb-1">
+                  <span>ຮູບພາບສິນຄ້າ (Product Photo)</span>
+                  <span className="text-emerald-500 font-bold text-[9px]">Ctrl+V ວາງໄດ້</span>
+                </label>
+                <div className="border border-dashed border-slate-300 dark:border-neutral-700 rounded-xl p-3 relative flex items-center justify-between">
+                  <input 
+                    type="file" 
+                    accept="image/*" 
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const b64 = await compressImage(file);
+                        setNewProductForm(prev => ({ ...prev, productImage: b64 }));
+                      }
+                    }} 
+                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" 
+                  />
+                  {newProductForm.productImage ? (
+                    <div className="flex items-center gap-2 w-full justify-between">
+                      <img src={newProductForm.productImage} alt="Product" className="w-10 h-10 rounded-lg object-cover border border-neutral-700" />
+                      <span className="text-xs text-emerald-500 font-bold">ອັບໂຫຼດຮູບສິນຄ້າແລ້ວ ✓</span>
+                      <button type="button" onClick={(e) => { e.stopPropagation(); setNewProductForm(prev => ({ ...prev, productImage: '' })); }} className="text-rose-500 p-1">✕</button>
+                    </div>
+                  ) : (
+                    <span className="text-xs text-slate-400 mx-auto flex items-center gap-1.5"><ImageIcon className="w-4 h-4" /> ຄລິກເລືອກຮູບ ຫຼື ກົດ Ctrl+V</span>
+                  )}
                 </div>
               </div>
 
