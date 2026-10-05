@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   collection, query, onSnapshot, addDoc, setDoc, deleteDoc, doc, serverTimestamp 
@@ -8,7 +8,7 @@ import { useTranslation } from 'react-i18next';
 import { 
   BookOpen, Plus, Trash2, Edit2, Calendar, 
   Package, ShoppingCart, Layers, Zap, Utensils, FileText,
-  DollarSign, TrendingUp, Percent, Sparkles, Tag, Upload, Eye, X, Image as ImageIcon, Receipt
+  DollarSign, TrendingUp, Sparkles, Tag, Upload, X, Receipt, Printer, CheckCircle2, QrCode
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -99,7 +99,7 @@ interface RecipeIngredientRow {
 
 export default function Inventory() {
   const { i18n } = useTranslation();
-  const [subTab, setSubTab] = useState<'recipes' | 'sales' | 'balances'>('recipes');
+  const [subTab, setSubTab] = useState<'recipes' | 'sales' | 'balances'>('sales');
   
   const [products, setProducts] = useState<any[]>([]);
   const [supplierPrices, setSupplierPrices] = useState<any[]>([]);
@@ -107,14 +107,14 @@ export default function Inventory() {
   const [salesRecords, setSalesRecords] = useState<any[]>([]);
   const [adjustments, setAdjustments] = useState<any[]>([]);
 
-  // 📝 Recipe Builder Form State
+  // Recipe Builder Form State
   const [menuName, setMenuName] = useState('');
-  const [batchYield, setBatchYield] = useState<number | string>(10); // 🌟 1 ສູດຜະລິດໄດ້ຈັກກ້ອນ/ຈອກ (Default = 10)
-  const [overheadCost, setOverheadCost] = useState<number | string>(1500); // ຄ່າໄຟ-ນ້ຳ-ບັນຈຸພັນ
-  const [sellingPrice, setSellingPrice] = useState<number | string>(25000); // ລາຄາຂາຍຕໍ່ກ້ອນ
+  const [batchYield, setBatchYield] = useState<number | string>(10);
+  const [overheadCost, setOverheadCost] = useState<number | string>(1500);
+  const [sellingPrice, setSellingPrice] = useState<number | string>(25000);
   const [pricingNote, setPricingNote] = useState('');
   const [note, setNote] = useState('');
-  const [recipeImage, setRecipeImage] = useState(''); // 🌟 ຮູບຕົວຢ່າງສິນຄ້າ
+  const [recipeImage, setRecipeImage] = useState('');
   const [recipeIngredients, setRecipeIngredients] = useState<RecipeIngredientRow[]>([]);
   const [editingRecipe, setEditingRecipe] = useState<any | null>(null);
   const [isRecipeModalOpen, setIsRecipeModalOpen] = useState(false);
@@ -124,7 +124,20 @@ export default function Inventory() {
   const [selectedDate, setSelectedDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
   const [quantitiesSold, setQuantitiesSold] = useState<{ [recipeId: string]: number }>({});
   const [isDeducting, setIsDeducting] = useState(false);
-  const [activeVirtualBillRecipe, setActiveVirtualBillRecipe] = useState<any | null>(null);
+
+  // 🌟 COMBINED DAILY SALES POS RECEIPT STATE (ບິນ POS ລວມທຸກເມນູ)
+  const [isCombinedBillOpen, setIsCombinedBillOpen] = useState(false);
+  const [combinedBillData, setCombinedBillData] = useState<{
+    date: string;
+    items: any[];
+    totalRevenue: number;
+    totalCost: number;
+    totalProfit: number;
+    totalQty: number;
+    billNo: string;
+  } | null>(null);
+
+  const printBillRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const unsubP = onSnapshot(query(collection(db, 'products')), snap => setProducts(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
@@ -148,26 +161,6 @@ export default function Inventory() {
       setQuantitiesSold(qClear);
     }
   }, [selectedDate, recipes, salesRecords]);
-
-  // Clipboard Paste for Recipe Image
-  useEffect(() => {
-    const handlePaste = async (e: ClipboardEvent) => {
-      if (!isRecipeModalOpen) return;
-      const items = e.clipboardData?.items;
-      if (!items) return;
-      for (let i = 0; i < items.length; i++) {
-        if (items[i].type.indexOf('image') !== -1) {
-          const file = items[i].getAsFile();
-          if (file) {
-            const b64 = await compressImage(file);
-            setRecipeImage(b64);
-          }
-        }
-      }
-    };
-    window.addEventListener('paste', handlePaste);
-    return () => window.removeEventListener('paste', handlePaste);
-  }, [isRecipeModalOpen]);
 
   // Dropdown options from Supplier Prices
   const supplierProductOptions = useMemo(() => {
@@ -213,7 +206,7 @@ export default function Inventory() {
     return Array.from(map.values());
   }, [supplierPrices, products]);
 
-  // 💡 ຄິດໄລ່ຕົ້ນທຶນຕົວຈິງຕໍ່ 1 ກ້ອນ/ຈອກ ໂດຍຫານດ້ວຍ BATCH YIELD!
+  // Recipes with Calculated Costs
   const recipesWithCalculatedCosts = useMemo(() => {
     return recipes.map(recipe => {
       let totalBatchRawCost = 0;
@@ -244,7 +237,6 @@ export default function Inventory() {
       });
 
       const overhead = Number(recipe.overheadCost) || 0;
-      // 🌟 ຕົ້ນທຶນຕໍ່ 1 ກ້ອນ = (ຕົ້ນທຶນວັດຖຸດິບລວມທັງເຕົາ ÷ ຈຳນວນກ້ອນ) + ຄ່າໄຟຕໍ່ກ້ອນ
       const rawCostPerUnit = totalBatchRawCost / yieldCount;
       const totalCostPerUnit = rawCostPerUnit + overhead;
       const price = Number(recipe.sellingPrice) || 0;
@@ -269,7 +261,7 @@ export default function Inventory() {
     });
   }, [recipes, products]);
 
-  // 📦 INVENTORY BALANCES & YIELD-BASED DEDUCTION
+  // Inventory Balances with Yield-Based Consumption
   const inventoryBalances = useMemo(() => {
     return products.map(p => {
       const pPrices = supplierPrices.filter(sp => sp.productId === p.id);
@@ -293,8 +285,6 @@ export default function Inventory() {
               let baseUnits = amt;
               if (u === 'tsp' || u === 'ຊ້ອນຊາ') baseUnits = amt * 5;
               else if (u === 'tbsp' || u === 'ຊ້ອນໂຕະ') baseUnits = amt * 15;
-              
-              // 🌟 ຕັດສະຕັອກຕາມອັດຕາສ່ວນຂາຍ: (ຈຳນວນຂາຍ / Yield) * ວັດຖຸດິບຕໍ່ເຕົາ
               totalConsumed += (baseUnits / yieldCount) * qtySold;
             }
           }
@@ -315,83 +305,87 @@ export default function Inventory() {
     });
   }, [products, supplierPrices, salesRecords, recipes, adjustments]);
 
-  // Save Recipe with Batch Yield & Recipe Image
-  const handleSaveRecipe = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!menuName.trim() || recipeIngredients.length === 0) {
-      alert("ກະລຸນາໃສ່ຊື່ເມນູ ແລະ ເລືອກວັດຖຸດິບຢ່າງໜ້ອຍ 1 ລາຍການ");
+  // 🚀 CORE HANDLER: COMMIT & DEDUCT STOCK ALL ➔ ສ້າງໃບບິນ POS ລວມ + RESET ເປັນ 0
+  const handleCommitAndDeductAll = async () => {
+    // 1. ກັ່ນຕອງສະເພາະເມນູທີ່ມີການຂາຍ > 0
+    const activeSoldItems = recipesWithCalculatedCosts
+      .filter(r => (quantitiesSold[r.id] || 0) > 0)
+      .map(r => {
+        const qty = quantitiesSold[r.id];
+        const lineRevenue = qty * (r.sellingPrice || 0);
+        const lineCost = qty * (r.totalCostPerUnit || 0);
+        const lineProfit = qty * (r.netProfitPerUnit || 0);
+        return {
+          ...r,
+          soldQty: qty,
+          lineRevenue,
+          lineCost,
+          lineProfit
+        };
+      });
+
+    if (activeSoldItems.length === 0) {
+      alert("ກະລຸນາໃສ່ຈຳນວນຂາຍ (+) ຢ່າງໜ້ອຍ 1 ເມນູກ່ອນກົດ Commit!");
       return;
     }
 
+    setIsDeducting(true);
     try {
-      setIsSavingRecipe(true);
-      const payloadIngredients = recipeIngredients
-        .filter(it => it.productId && Number(it.amount) > 0)
-        .map(it => ({
-          productId: it.productId,
-          name: it.name,
-          supplier: it.supplier,
-          amount: parseFloat(String(it.amount)) || 0,
-          unit: it.unit || 'g',
-          packSize: Number(it.packSize) || 1000,
-          unitCostLAK: it.unitCostLAK || 0
-        }));
-
-      const recipePayload = {
-        menuName: menuName.trim(),
-        batchYield: Math.max(1, Number(batchYield) || 1), // 🌟 ຈຳນວນກ້ອນຕໍ່ສູດ
-        overheadCost: Number(overheadCost) || 0,
-        sellingPrice: Number(sellingPrice) || 0,
-        recipeImage: recipeImage || '',                  // 🌟 ຮູບຕົວຢ່າງສິນຄ້າ
-        pricingNote: pricingNote.trim(),
-        note: note.trim(),
-        ingredients: payloadIngredients,
+      // 2. ບັນທຶກລົງ menu_sales ເພື່ອຕັດສະຕັອກ
+      await setDoc(doc(db, 'menu_sales', selectedDate), {
+        date: selectedDate,
+        itemsSold: quantitiesSold,
         updatedAt: serverTimestamp()
-      };
+      }, { merge: true });
 
-      if (editingRecipe) {
-        await setDoc(doc(db, 'recipes', editingRecipe.id), recipePayload, { merge: true });
-      } else {
-        await addDoc(collection(db, 'recipes'), recipePayload);
+      // 3. ຄິດໄລ່ຍອດລວມທັງໝົດຂອງໃບບິນ
+      const totalRevenue = activeSoldItems.reduce((sum, it) => sum + it.lineRevenue, 0);
+      const totalCost = activeSoldItems.reduce((sum, it) => sum + it.lineCost, 0);
+      const totalProfit = activeSoldItems.reduce((sum, it) => sum + it.lineProfit, 0);
+      const totalQty = activeSoldItems.reduce((sum, it) => sum + it.soldQty, 0);
+
+      // 4. ສົ່ງລາຍຮັບເຂົ້າບັນຊີ Finance (Transactions) ອັດຕະໂນມັດ
+      if (totalRevenue > 0) {
+        await addDoc(collection(db, 'transactions'), {
+          type: 'income',
+          amount: totalRevenue,
+          category: 'ຂາຍເຄື່ອງດື່ມ & ເຂົ້າໜົມ (Sales)',
+          source: 'onepay',
+          description: `ຍອດຂາຍລວມປະຈຳວັນ ${selectedDate} (ລວມ ${totalQty} ລາຍການ)`,
+          date: selectedDate,
+          time: format(new Date(), 'HH:mm'),
+          createdAt: serverTimestamp()
+        });
       }
 
-      setIsRecipeModalOpen(false);
-      setEditingRecipe(null);
-      setMenuName('');
-      setBatchYield(10);
-      setOverheadCost(1500);
-      setSellingPrice(25000);
-      setRecipeImage('');
-      setPricingNote('');
-      setNote('');
-      setRecipeIngredients([]);
-      alert("ບັນທຶກສູດສຳເລັດແລ້ວ!");
+      // 5. ເປີດໃບບິນ POS ລວມ (Virtual Bill) ຂຶ້ນມາສະແດງທັນທີ
+      const randomBillNo = `POS-${selectedDate.replace(/-/g, '')}-${Math.floor(1000 + Math.random() * 9000)}`;
+      setCombinedBillData({
+        date: selectedDate,
+        items: activeSoldItems,
+        totalRevenue,
+        totalCost,
+        totalProfit,
+        totalQty,
+        billNo: randomBillNo
+      });
+      setIsCombinedBillOpen(true);
+
+      // 🌟 6. ຣີເຊັດຕົວເລກ + / - ກັບມາເປັນ 0 ທັງໝົດຕາມທີ່ທ່ານຕ້ອງການ!
+      const resetMap: { [id: string]: number } = {};
+      recipes.forEach(rec => { resetMap[rec.id] = 0; });
+      setQuantitiesSold(resetMap);
+
+    } catch (e: any) {
+      alert("Error committing sales: " + e.message);
     } finally {
-      setIsSavingRecipe(false);
+      setIsDeducting(false);
     }
   };
 
-  // Live Modal Cost Calculation
-  const currentModalCalc = useMemo(() => {
-    const totalBatchRaw = recipeIngredients.reduce((s, it) => {
-      const amt = Number(it.amount) || 0;
-      const u = (it.unit || 'g').toLowerCase();
-      let bUnits = amt;
-      if (u === 'tsp' || u === 'ຊ້ອນຊາ') bUnits = amt * 5;
-      else if (u === 'tbsp' || u === 'ຊ້ອນໂຕະ') bUnits = amt * 15;
-      return s + (bUnits * (it.unitCostLAK || 0));
-    }, 0);
-
-    const yieldCount = Math.max(1, Number(batchYield) || 1);
-    const rawPerUnit = totalBatchRaw / yieldCount;
-    const overhead = Number(overheadCost) || 0;
-    const totalCostPerUnit = rawPerUnit + overhead;
-    const price = Number(sellingPrice) || 0;
-    const netProfit = price > 0 ? price - totalCostPerUnit : 0;
-    const margin = price > 0 ? (netProfit / price) * 100 : 0;
-
-    return { totalBatchRaw, yieldCount, rawPerUnit, overhead, totalCostPerUnit, price, netProfit, margin };
-  }, [recipeIngredients, batchYield, overheadCost, sellingPrice]);
+  const handlePrintReceipt = () => {
+    window.print();
+  };
 
   return (
     <div className="space-y-6 font-sans pb-16">
@@ -406,7 +400,7 @@ export default function Inventory() {
             ສູດຄຸກກີ້, ເຂົ້າໜົມ & ໃບບິນຂາຍລາຍວັນ
           </h1>
           <p className="text-xs text-slate-400 mt-0.5">
-            ລະບຸຈຳນວນກ້ອນຕໍ່ສູດ (Batch Yield), ອັບໂຫຼດຮູບສິນຄ້າ ແລະ ເບິ່ງໃບບິນ Virtual Bill ປະຈຳວັນ
+            ຕັດສະຕັອກຕາມອັດຕາສ່ວນຂາຍ (Batch Yield) ແລະ ອອກໃບບິນ POS ລວມທຸກເມນູອັດຕະໂນມັດ
           </p>
         </div>
 
@@ -435,17 +429,17 @@ export default function Inventory() {
       {/* Tabs */}
       <div className="flex gap-2">
         <button
-          onClick={() => setSubTab('recipes')}
-          className={`px-4 py-2 rounded-2xl text-xs font-bold transition-all cursor-pointer ${subTab === 'recipes' ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950' : 'bg-white dark:bg-[#141414] border border-slate-200 dark:border-neutral-800 text-slate-400'}`}
-        >
-          ສູດທັງໝົດ (Recipes & Costing)
-        </button>
-        <button
           onClick={() => setSubTab('sales')}
           className={`px-4 py-2 rounded-2xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${subTab === 'sales' ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950' : 'bg-white dark:bg-[#141414] border border-slate-200 dark:border-neutral-800 text-slate-400'}`}
         >
           <Receipt className="w-3.5 h-3.5" />
           <span>ຍອດຂາຍລາຍວັນ & Virtual Bill</span>
+        </button>
+        <button
+          onClick={() => setSubTab('recipes')}
+          className={`px-4 py-2 rounded-2xl text-xs font-bold transition-all cursor-pointer ${subTab === 'recipes' ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950' : 'bg-white dark:bg-[#141414] border border-slate-200 dark:border-neutral-800 text-slate-400'}`}
+        >
+          ສູດທັງໝົດ (Recipes & Costing)
         </button>
         <button
           onClick={() => setSubTab('balances')}
@@ -455,13 +449,126 @@ export default function Inventory() {
         </button>
       </div>
 
-      {/* TAB 1: RECIPES CARDS */}
+      {/* 🌟 TAB 1: DAILY SALES & MENU CARDS */}
+      {subTab === 'sales' && (
+        <div className="space-y-6">
+          <div className="high-density-card p-6 flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+            <div>
+              <h3 className="text-base font-serif text-slate-800 dark:text-white">Daily Sales & Menu Cards</h3>
+              <p className="text-xs text-slate-400">ໃສ່ຈຳນວນທີ່ຂາຍໄດ້ ແລ້ວກົດ Commit ດ້ານລຸ່ມເພື່ອອອກບິນ POS ແລະ ຕັດສາງ</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Calendar className="w-4 h-4 text-slate-400" />
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={e => setSelectedDate(e.target.value)}
+                className="crystal-input !py-1.5 !text-xs font-mono font-bold"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {recipesWithCalculatedCosts.map((rec) => {
+              const qtySold = quantitiesSold[rec.id] || 0;
+              const totalItemRevenue = qtySold * (rec.sellingPrice || 0);
+              const totalItemProfit = qtySold * (rec.netProfitPerUnit || 0);
+
+              return (
+                <div key={rec.id} className="high-density-card p-5 space-y-4 flex flex-col justify-between">
+                  <div>
+                    {/* Header: Photo + Name */}
+                    <div className="flex items-center gap-3">
+                      {rec.recipeImage ? (
+                        <img src={rec.recipeImage} alt={rec.menuName} className="w-14 h-14 rounded-2xl object-cover border border-neutral-700 shrink-0" />
+                      ) : (
+                        <div className="w-14 h-14 rounded-2xl bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center text-slate-400 shrink-0">
+                          <Package className="w-6 h-6" />
+                        </div>
+                      )}
+
+                      <div className="flex-1 min-w-0">
+                        <h4 className="text-sm font-bold text-slate-800 dark:text-white truncate">{rec.menuName}</h4>
+                        <span className="text-[10px] text-slate-400 font-mono">
+                          ຂາຍ: {Number(rec.sellingPrice).toLocaleString()} ₭ (ຕົ້ນທຶນ: {Math.round(rec.totalCostPerUnit).toLocaleString()} ₭)
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Sales Input Counter (+ / -) */}
+                    <div className="mt-4 p-3 rounded-2xl bg-slate-50 dark:bg-[#1a1a1a] flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-700 dark:text-neutral-300">ຍອດຂາຍມື້ນີ້:</span>
+                      <div className="flex items-center gap-2">
+                        <button 
+                          onClick={() => setQuantitiesSold(prev => ({ ...prev, [rec.id]: Math.max(0, (prev[rec.id] || 0) - 1) }))} 
+                          className="w-8 h-8 rounded-xl bg-slate-200 dark:bg-neutral-800 font-bold cursor-pointer"
+                        >
+                          -
+                        </button>
+                        <input
+                          type="number"
+                          min="0"
+                          value={quantitiesSold[rec.id] || 0}
+                          onChange={(e) => setQuantitiesSold(prev => ({ ...prev, [rec.id]: parseInt(e.target.value) || 0 }))}
+                          className="w-14 py-1 font-bold text-center border rounded-xl dark:bg-black/30 text-sm font-mono"
+                        />
+                        <button 
+                          onClick={() => setQuantitiesSold(prev => ({ ...prev, [rec.id]: (prev[rec.id] || 0) + 1 }))} 
+                          className="w-8 h-8 rounded-xl bg-slate-200 dark:bg-neutral-800 font-bold cursor-pointer"
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Live Row Output */}
+                    {qtySold > 0 && (
+                      <div className="mt-2 text-xs font-mono space-y-0.5 pt-1">
+                        <div className="flex justify-between text-slate-500">
+                          <span>ລາຍຮັບ:</span>
+                          <span className="font-bold text-sky-500">+{totalItemRevenue.toLocaleString()} ₭</span>
+                        </div>
+                        <div className="flex justify-between text-slate-500">
+                          <span>ກຳໄລ:</span>
+                          <span className="font-bold text-emerald-500">+{Math.round(totalItemProfit).toLocaleString()} ₭</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* 🌟 ປຸ່ມ COMMIT: ກົດແລ້ວອອກບິນ POS ລວມທຸກເມນູ + ຣີເຊັດຕົວເລກເປັນ 0 */}
+          <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 pt-4 border-t border-slate-100 dark:border-neutral-800">
+            <div>
+              <p className="text-xs font-bold text-slate-800 dark:text-white">
+                ລວມຈຳນວນທີ່ເລືອກ: {Object.values(quantitiesSold).reduce((a, b) => a + b, 0)} ລາຍການ
+              </p>
+              <p className="text-[10px] text-slate-400">
+                ກົດປຸ່ມດ້ານຂວາເພື່ອຕັດສະຕັອກ, ອອກໃບບິນ POS ລວມ ແລະ ຣີເຊັດຕົວເລກກັບເປັນ 0
+              </p>
+            </div>
+
+            <button
+              onClick={handleCommitAndDeductAll}
+              disabled={isDeducting || Object.values(quantitiesSold).every(v => v === 0)}
+              className="crystal-button !py-3.5 !px-8 text-xs font-black tracking-wider uppercase shadow-xl flex items-center gap-2 cursor-pointer disabled:opacity-40"
+            >
+              <Receipt className="w-4 h-4" />
+              <span>{isDeducting ? 'PROCESSING...' : 'COMMIT & DEDUCT STOCK ALL'}</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 2: RECIPES CARDS */}
       {subTab === 'recipes' && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {recipesWithCalculatedCosts.map((recipe) => (
             <div key={recipe.id} className="high-density-card p-6 flex flex-col justify-between space-y-4">
               <div>
-                {/* Header: Photo + Name + Price */}
                 <div className="flex items-start gap-3 border-b border-slate-100 dark:border-neutral-800 pb-3">
                   {recipe.recipeImage ? (
                     <img src={recipe.recipeImage} alt={recipe.menuName} className="w-14 h-14 rounded-2xl object-cover border border-neutral-700 shadow-sm shrink-0" />
@@ -489,7 +596,6 @@ export default function Inventory() {
                   </div>
                 </div>
 
-                {/* Breakdown per Piece */}
                 <div className="mt-3 p-3 rounded-2xl bg-slate-50 dark:bg-[#1a1a1a] text-xs space-y-1 font-mono">
                   <div className="flex justify-between text-slate-500">
                     <span>ວັດຖຸດິບຕໍ່ກ້ອນ ({Math.round(recipe.totalBatchRawCost).toLocaleString()} ÷ {recipe.batchYield}):</span>
@@ -510,17 +616,10 @@ export default function Inventory() {
                   )}
                 </div>
 
-                {/* Notes */}
                 {recipe.pricingNote && (
                   <div className="mt-2.5 p-3 rounded-2xl bg-emerald-500/5 dark:bg-emerald-500/10 border border-emerald-500/15 text-xs">
                     <span className="text-[9px] font-bold uppercase text-emerald-600 dark:text-emerald-400 block">💡 Note ການຕັ້ງລາຄາ:</span>
                     <p className="text-slate-600 dark:text-neutral-300 font-light mt-0.5">{recipe.pricingNote}</p>
-                  </div>
-                )}
-                {recipe.note && (
-                  <div className="mt-2 p-3 rounded-2xl bg-amber-500/5 dark:bg-amber-500/10 border border-amber-500/15 text-xs">
-                    <span className="text-[9px] font-bold uppercase text-amber-600 dark:text-amber-400 block">📝 Note ວິທີເຮັດ:</span>
-                    <p className="text-slate-600 dark:text-neutral-300 font-light mt-0.5">{recipe.note}</p>
                   </div>
                 )}
               </div>
@@ -563,131 +662,6 @@ export default function Inventory() {
         </div>
       )}
 
-      {/* 🌟 TAB 2: DAILY SALES & VIRTUAL BILL / MENU CARD (ຕາມຮູບຕົວຢ່າງ IMAGE 1) */}
-      {subTab === 'sales' && (
-        <div className="space-y-6">
-          <div className="high-density-card p-6 flex flex-col sm:flex-row justify-between sm:items-center gap-4">
-            <div>
-              <h3 className="text-base font-bold text-slate-800 dark:text-white">Daily Sales & Menu Cards</h3>
-              <p className="text-xs text-slate-400">ກົດທີ່ປຸ່ມ "ເບິ່ງ Virtual Bill" ເພື່ອເບິ່ງກາດສິນຄ້າຂາຍດີປະຈຳວັນ</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <Calendar className="w-4 h-4 text-slate-400" />
-              <input
-                type="date"
-                value={selectedDate}
-                onChange={e => setSelectedDate(e.target.value)}
-                className="crystal-input !py-1.5 !text-xs font-mono font-bold"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {recipesWithCalculatedCosts.map((rec) => {
-              const qtySold = quantitiesSold[rec.id] || 0;
-              const totalItemRevenue = qtySold * (rec.sellingPrice || 0);
-              const totalItemProfit = qtySold * (rec.netProfitPerUnit || 0);
-
-              return (
-                <div key={rec.id} className="high-density-card p-5 space-y-4 flex flex-col justify-between">
-                  <div>
-                    {/* Item Card Header */}
-                    <div className="flex items-center gap-3">
-                      {rec.recipeImage ? (
-                        <img src={rec.recipeImage} alt={rec.menuName} className="w-12 h-12 rounded-xl object-cover border border-neutral-700 shrink-0" />
-                      ) : (
-                        <div className="w-12 h-12 rounded-xl bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center text-slate-400 shrink-0">
-                          <Package className="w-5 h-5" />
-                        </div>
-                      )}
-
-                      <div className="flex-1 min-w-0">
-                        <h4 className="text-sm font-bold text-slate-800 dark:text-white truncate">{rec.menuName}</h4>
-                        <span className="text-[10px] text-slate-400 font-mono">
-                          ຂາຍ: {Number(rec.sellingPrice).toLocaleString()} ₭ (ຕົ້ນທຶນ: {Math.round(rec.totalCostPerUnit).toLocaleString()} ₭)
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Sales Input Counter */}
-                    <div className="mt-4 p-3 rounded-2xl bg-slate-50 dark:bg-[#1a1a1a] flex items-center justify-between">
-                      <span className="text-xs font-bold text-slate-700 dark:text-neutral-300">ຍອດຂາຍມື້ນີ້:</span>
-                      <div className="flex items-center gap-2">
-                        <button 
-                          onClick={() => setQuantitiesSold(prev => ({ ...prev, [rec.id]: Math.max(0, (prev[rec.id] || 0) - 1) }))} 
-                          className="w-8 h-8 rounded-xl bg-slate-200 dark:bg-neutral-800 font-bold cursor-pointer"
-                        >
-                          -
-                        </button>
-                        <input
-                          type="number"
-                          min="0"
-                          value={quantitiesSold[rec.id] || 0}
-                          onChange={(e) => setQuantitiesSold(prev => ({ ...prev, [rec.id]: parseInt(e.target.value) || 0 }))}
-                          className="w-14 py-1 font-bold text-center border rounded-xl dark:bg-black/30 text-sm font-mono"
-                        />
-                        <button 
-                          onClick={() => setQuantitiesSold(prev => ({ ...prev, [rec.id]: (prev[rec.id] || 0) + 1 }))} 
-                          className="w-8 h-8 rounded-xl bg-slate-200 dark:bg-neutral-800 font-bold cursor-pointer"
-                        >
-                          +
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Live Day Output */}
-                    {qtySold > 0 && (
-                      <div className="mt-2 text-xs font-mono space-y-0.5">
-                        <div className="flex justify-between text-slate-500">
-                          <span>ລາຍຮັບ:</span>
-                          <span className="font-bold text-sky-500">+{totalItemRevenue.toLocaleString()} ₭</span>
-                        </div>
-                        <div className="flex justify-between text-slate-500">
-                          <span>ກຳໄລ:</span>
-                          <span className="font-bold text-emerald-500">+{Math.round(totalItemProfit).toLocaleString()} ₭</span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Button: Open Virtual Bill (Image 1 Style) */}
-                  <button
-                    type="button"
-                    onClick={() => setActiveVirtualBillRecipe({ ...rec, soldToday: qtySold, revenueToday: totalItemRevenue, profitToday: totalItemProfit })}
-                    className="w-full py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer"
-                  >
-                    <Receipt className="w-3.5 h-3.5 text-sky-500" />
-                    <span>ເບິ່ງ Virtual Bill ກາດສິນຄ້າ</span>
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="flex justify-end pt-4 border-t border-slate-100 dark:border-neutral-800">
-            <button
-              onClick={async () => {
-                setIsDeducting(true);
-                try {
-                  await setDoc(doc(db, 'menu_sales', selectedDate), {
-                    date: selectedDate,
-                    itemsSold: quantitiesSold,
-                    updatedAt: serverTimestamp()
-                  }, { merge: true });
-                  alert("ບັນທຶກຍອດຂາຍ ແລະ ຕັດສະຕັອກສຳເລັດແລ້ວ!");
-                } finally {
-                  setIsDeducting(false);
-                }
-              }}
-              disabled={isDeducting}
-              className="crystal-button"
-            >
-              {isDeducting ? 'Deducting...' : 'Commit & Deduct Stock All'}
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* TAB 3: INVENTORY BALANCES */}
       {subTab === 'balances' && (
         <div className="high-density-card p-6 overflow-hidden space-y-4">
@@ -714,11 +688,11 @@ export default function Inventory() {
                   return (
                     <tr key={item.id} className="hover:bg-slate-50/50 dark:hover:bg-neutral-800/30">
                       <td className="p-3 font-bold text-slate-800 dark:text-white">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2.5">
                           {item.productImage ? (
-                            <img src={item.productImage} alt={item.name} className="w-8 h-8 rounded-lg object-cover border border-neutral-700" />
+                            <img src={item.productImage} alt={item.name} className="w-9 h-9 rounded-xl object-cover border border-neutral-700" />
                           ) : (
-                            <div className="w-8 h-8 rounded-lg bg-neutral-200 dark:bg-neutral-800 flex items-center justify-center text-slate-400">
+                            <div className="w-9 h-9 rounded-xl bg-neutral-200 dark:bg-neutral-800 flex items-center justify-center text-slate-400">
                               <Package className="w-4 h-4" />
                             </div>
                           )}
@@ -748,7 +722,128 @@ export default function Inventory() {
         </div>
       )}
 
-      {/* 🚀 MODAL: RECIPE BUILDER (ມີ BATCH YIELD & ຮູບສິນຄ້າ) */}
+      {/* 🌟 ໃບບິນ POS ລວມທຸກເມນູ (COMBINED POS SALES RECEIPT WITH PRODUCT PHOTOS) */}
+      <AnimatePresence>
+        {isCombinedBillOpen && combinedBillData && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setIsCombinedBillOpen(false)}>
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }} 
+              animate={{ opacity: 1, scale: 1 }} 
+              className="bg-[#faf7f0] text-slate-800 w-full max-w-md rounded-3xl p-6 shadow-2xl relative border-t-8 border-dashed border-[#052659] max-h-[92vh] overflow-y-auto"
+              style={{ fontFamily: "'Courier New', Courier, monospace" }}
+              onClick={e => e.stopPropagation()}
+              ref={printBillRef}
+            >
+              {/* Close Button */}
+              <button 
+                onClick={() => setIsCombinedBillOpen(false)} 
+                className="absolute top-4 right-4 p-1.5 rounded-full bg-slate-200/60 hover:bg-slate-300 text-slate-600 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+
+              {/* Receipt Header */}
+              <div className="text-center space-y-1 border-b border-dashed border-slate-300 pb-3">
+                <h2 className="text-xl font-serif font-black uppercase text-slate-900 tracking-tight">
+                  LE OUVE WORKSPACE
+                </h2>
+                <p className="text-[10px] text-slate-500 uppercase tracking-widest leading-none">
+                  Bakery & Cafe Architecture
+                </p>
+                <p className="text-[10px] text-slate-500">Vientiane, Lao PDR</p>
+                <div className="pt-2 text-[10px] text-slate-500 flex justify-between">
+                  <span>BILL: {combinedBillData.billNo}</span>
+                  <span>DATE: {combinedBillData.date}</span>
+                </div>
+              </div>
+
+              {/* Consolidated Line Items with Photos */}
+              <div className="py-3 space-y-2.5 border-b border-dashed border-slate-300">
+                <div className="text-[10px] font-bold text-slate-400 flex justify-between pb-1 border-b border-dotted border-slate-200 uppercase">
+                  <span>MENU ITEM</span>
+                  <span>QTY × PRICE</span>
+                  <span>TOTAL (₭)</span>
+                </div>
+
+                {combinedBillData.items.map((it, idx) => (
+                  <div key={idx} className="flex items-center gap-2.5 py-1">
+                    {/* 📸 ຮູບສິນຄ້າຕິດໄປໃນໃບບິນ POS */}
+                    {it.recipeImage ? (
+                      <img src={it.recipeImage} alt={it.menuName} className="w-9 h-9 rounded-lg object-cover border border-slate-300 shrink-0" />
+                    ) : (
+                      <div className="w-9 h-9 rounded-lg bg-slate-200 flex items-center justify-center text-slate-400 shrink-0">
+                        <Package className="w-4 h-4" />
+                      </div>
+                    )}
+
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-black text-slate-900 truncate leading-tight">{it.menuName}</p>
+                      <p className="text-[10px] text-slate-500 font-mono">
+                        {it.soldQty} × {Number(it.sellingPrice).toLocaleString()}
+                      </p>
+                    </div>
+
+                    <span className="text-xs font-mono font-black text-slate-900 shrink-0">
+                      {it.lineRevenue.toLocaleString()} ₭
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Totals Calculation */}
+              <div className="py-3 space-y-1.5 text-xs font-mono border-b border-dashed border-slate-300">
+                <div className="flex justify-between text-slate-600">
+                  <span>ຈຳນວນລາຍການລວມ:</span>
+                  <span>{combinedBillData.totalQty} ຊິ້ນ/ຈອກ</span>
+                </div>
+                <div className="flex justify-between text-slate-600">
+                  <span>ຕົ້ນທຶນວັດຖຸດິບ (COGS ຕັດສາງ):</span>
+                  <span>-{Math.round(combinedBillData.totalCost).toLocaleString()} ₭</span>
+                </div>
+                <div className="flex justify-between text-emerald-700 font-bold">
+                  <span>ກຳໄລສຸດທິປະຈຳວັນ:</span>
+                  <span>+{Math.round(combinedBillData.totalProfit).toLocaleString()} ₭</span>
+                </div>
+                <div className="flex justify-between text-base font-black text-slate-900 pt-1.5 border-t border-slate-300">
+                  <span>ຍອດຂາຍລວມ (GRAND TOTAL):</span>
+                  <span>{combinedBillData.totalRevenue.toLocaleString()} ₭</span>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="text-center pt-3 space-y-2">
+                <div className="flex items-center justify-center gap-1.5 text-emerald-600 text-xs font-bold">
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Deducted & Committed to Finance ✓</span>
+                </div>
+                <p className="text-[9px] text-slate-400 italic">
+                  THANK YOU FOR SUPPORTING LE OUVE
+                </p>
+
+                {/* Print Button */}
+                <div className="pt-2 flex gap-2">
+                  <button
+                    onClick={handlePrintReceipt}
+                    className="flex-1 py-2.5 rounded-xl bg-slate-900 hover:bg-black text-white font-sans text-xs font-bold flex items-center justify-center gap-2 cursor-pointer shadow-md"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    <span>ພິມໃບບິນ POS (Print)</span>
+                  </button>
+                  <button
+                    onClick={() => setIsCombinedBillOpen(false)}
+                    className="px-4 py-2.5 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 font-sans text-xs font-bold cursor-pointer"
+                  >
+                    ປິດ
+                  </button>
+                </div>
+              </div>
+
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* MODAL: RECIPE BUILDER */}
       <AnimatePresence>
         {isRecipeModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
@@ -764,7 +859,7 @@ export default function Inventory() {
                     <span>{editingRecipe ? 'ແກ້ໄຂສູດ' : 'ສ້າງສູດ Cookie, ເຂົ້າໜົມ & ເຄື່ອງດື່ມ'}</span>
                   </h3>
                   <p className="text-[10px] text-slate-400 mt-0.5">
-                    ໃສ່ວັດຖຸດິບທັງໝົດຂອງເຕົາ ແລ້ວກຳນົດຈຳນວນກ້ອນທີ່ຜະລິດໄດ້ (Batch Yield)
+                    ກຳນົດຈຳນວນກ້ອນທີ່ຜະລິດໄດ້ຕໍ່ເຕົາ (Batch Yield) ແລະ ອັບໂຫຼດຮູບສິນຄ້າ
                   </p>
                 </div>
                 <button onClick={() => setIsRecipeModalOpen(false)} className="text-slate-400 hover:text-white p-1">✕</button>
@@ -777,14 +872,13 @@ export default function Inventory() {
                     <input
                       type="text"
                       required
-                      placeholder="ເຊັ່ນ: Fudgy Brownies, Macadamia Dark Choc Cookie..."
+                      placeholder="ເຊັ່ນ: Macadamia Dark choc Cookie..."
                       value={menuName}
                       onChange={e => setMenuName(e.target.value)}
                       className="crystal-input w-full !text-sm font-bold"
                     />
                   </div>
 
-                  {/* 🌟 1 ສູດຜະລິດໄດ້ຈັກກ້ອນ (BATCH YIELD) */}
                   <div className="sm:col-span-4">
                     <label className="label-xs block mb-1 text-emerald-600 dark:text-emerald-400">
                       1 ສູດໄດ້ຈັກກ້ອນ/ຈອກ (Yield)
@@ -804,7 +898,7 @@ export default function Inventory() {
                 {/* 📸 ອັບໂຫຼດຮູບຕົວຢ່າງສິນຄ້າໃນແຕ່ລະສູດ */}
                 <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-[#1a1a1a] border border-slate-200 dark:border-neutral-800 space-y-1.5">
                   <label className="label-xs flex justify-between">
-                    <span>ຮູບພາບຕົວຢ່າງສິນຄ້າ (Recipe / Product Photo)</span>
+                    <span>ຮູບພາບຕົວຢ່າງສິນຄ້າ (Product Photo ທີ່ຈະໄປໂຊໃນໃບບິນ)</span>
                     <span className="text-emerald-500 font-bold text-[9px]">Ctrl+V ວາງໄດ້</span>
                   </label>
                   <div className="border border-dashed border-slate-300 dark:border-neutral-700 rounded-xl p-2.5 relative flex items-center justify-between">
@@ -815,7 +909,7 @@ export default function Inventory() {
                     {recipeImage ? (
                       <div className="flex items-center gap-3 w-full justify-between">
                         <img src={recipeImage} alt="Recipe Preview" className="w-12 h-12 rounded-xl object-cover border border-neutral-700 shadow-sm" />
-                        <span className="text-xs font-bold text-emerald-500 truncate flex-1 pl-2">ອັບໂຫຼດຮູບແລ້ວ ✓ (ຈະໄປໂຊໃນໃບບິນ Virtual Bill)</span>
+                        <span className="text-xs font-bold text-emerald-500 truncate flex-1 pl-2">ອັບໂຫຼດຮູບແລ້ວ ✓ (ຈະໄປໂຊໃນໃບບິນ POS)</span>
                         <button type="button" onClick={(e) => { e.stopPropagation(); setRecipeImage(''); }} className="text-rose-500 p-1">✕</button>
                       </div>
                     ) : (
@@ -836,7 +930,7 @@ export default function Inventory() {
                       value={overheadCost}
                       onChange={e => setOverheadCost(e.target.value)}
                       className="crystal-input w-full font-mono font-bold text-center !py-1.5"
-                      placeholder="700"
+                      placeholder="1500"
                     />
                   </div>
 
@@ -850,7 +944,7 @@ export default function Inventory() {
                       value={sellingPrice}
                       onChange={e => setSellingPrice(e.target.value)}
                       className="crystal-input w-full font-mono font-bold text-center !py-1.5"
-                      placeholder="25000"
+                      placeholder="23000"
                     />
                   </div>
                 </div>
@@ -863,7 +957,7 @@ export default function Inventory() {
                   </label>
                   <textarea
                     rows={2}
-                    placeholder="ຕົວຢ່າງ: 1 ສູດໄດ້ 10 ກ້ອນ, ຕົ້ນທຶນກ້ອນລະ 11,000₭, ຂາຍ 25,000₭, ກຳໄລ 14,000₭/ກ້ອນ..."
+                    placeholder="ຕົວຢ່າງ: 1 ສູດໄດ້ 5 ກ້ອນ, ຕົ້ນທຶນກ້ອນລະ 10,500₭, ຂາຍ 23,000₭, ກຳໄລ 12,500₭/ກ້ອນ..."
                     value={pricingNote}
                     onChange={e => setPricingNote(e.target.value)}
                     className="crystal-input w-full !text-xs font-normal leading-relaxed resize-none"
@@ -905,7 +999,7 @@ export default function Inventory() {
                       const u = (ing.unit || 'g').toLowerCase();
                       let bUnits = amt;
                       if (u === 'tsp' || u === 'ຊ້ອນຊາ') bUnits = amt * 5;
-                      else if (u === 'tbsp' || u === 'ຊ້ອນໂຕະ') bUnits = amt * 15;
+                      else if (u === 'tbsp' || u === 'ຊ້ອນໂຕະ') baseUnits = amt * 15;
                       const itemTotalCost = bUnits * (ing.unitCostLAK || 0);
 
                       return (
@@ -969,8 +1063,8 @@ export default function Inventory() {
                               >
                                 <option value="g">g</option>
                                 <option value="ml">ml</option>
-                                <option value="tsp">tsp (ຊ້ອນຊາ)</option>
-                                <option value="tbsp">tbsp (ຊ້ອນໂຕະ)</option>
+                                <option value="tsp">tsp</option>
+                                <option value="tbsp">tbsp</option>
                                 <option value="pcs">pcs</option>
                               </select>
                             </div>
@@ -988,10 +1082,10 @@ export default function Inventory() {
                   </div>
                 </div>
 
-                {/* 🌟 LIVE COST BREAKDOWN DIVIDED BY YIELD */}
+                {/* Live Breakdown */}
                 <div className="p-4 rounded-2xl bg-neutral-100 dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 space-y-1.5 font-mono text-xs">
                   <div className="flex justify-between">
-                    <span className="text-slate-500">ຕົ້ນທຶນວັດຖຸດິບທັງໝົດ ({currentModalCalc.yieldCount} ກ້ອນ):</span>
+                    <span className="text-slate-500">ຕົ້ນທຶນວັດຖຸດິບລວມ ({currentModalCalc.yieldCount} ກ້ອນ):</span>
                     <span>{Math.round(currentModalCalc.totalBatchRaw).toLocaleString()} ₭</span>
                   </div>
                   <div className="flex justify-between font-bold">
@@ -1010,75 +1104,9 @@ export default function Inventory() {
 
                 <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-neutral-800">
                   <button type="button" onClick={() => setIsRecipeModalOpen(false)} className="px-4 py-2 rounded-xl border text-xs font-bold text-slate-400">ຍົກເລີກ</button>
-                  <button type="submit" disabled={isSavingRecipe} className="crystal-button">ບັນທຶກສູດ & ຕົ້ນທຶນ</button>
+                  <button type="submit" disabled={isSavingRecipe} className="crystal-button">ບັນທຶກສູດ</button>
                 </div>
               </form>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* 🌟 VIRTUAL BILL / MENU CARD MODAL (ຕອບໂຈດຮູບຕົວຢ່າງ IMAGE 1) */}
-      <AnimatePresence>
-        {activeVirtualBillRecipe && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setActiveVirtualBillRecipe(null)}>
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.95 }} 
-              animate={{ opacity: 1, scale: 1 }} 
-              className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl space-y-4 text-slate-900 relative overflow-hidden" 
-              onClick={e => e.stopPropagation()}
-            >
-              <button onClick={() => setActiveVirtualBillRecipe(null)} className="absolute top-4 right-4 p-1.5 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 cursor-pointer">
-                <X className="w-4 h-4" />
-              </button>
-
-              <div className="text-center border-b border-dashed border-slate-200 pb-3">
-                <span className="text-[10px] font-black tracking-[0.3em] uppercase text-sky-600 block">
-                  LE OUVE WORKSPACE • BEST SELLER
-                </span>
-                <h3 className="font-serif text-2xl font-bold mt-0.5">{activeVirtualBillRecipe.menuName}</h3>
-                <span className="text-[10px] text-slate-400 font-mono">📅 ວັນທີ: {selectedDate}</span>
-              </div>
-
-              {/* Photo Display */}
-              <div className="w-full h-44 rounded-2xl overflow-hidden bg-slate-100 border border-slate-100">
-                {activeVirtualBillRecipe.recipeImage ? (
-                  <img src={activeVirtualBillRecipe.recipeImage} alt={activeVirtualBillRecipe.menuName} className="w-full h-full object-cover" />
-                ) : (
-                  <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 gap-1">
-                    <Package className="w-8 h-8 opacity-40" />
-                    <span className="text-[10px]">ຍັງບໍ່ມີຮູບສິນຄ້າ</span>
-                  </div>
-                )}
-              </div>
-
-              {/* Bill Details */}
-              <div className="space-y-2 font-mono text-xs border-b border-dashed border-slate-200 pb-3">
-                <div className="flex justify-between">
-                  <span className="text-slate-500">ລາຄາຂາຍຕໍ່ກ້ອນ:</span>
-                  <span className="font-bold">{Number(activeVirtualBillRecipe.sellingPrice).toLocaleString()} ₭</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500">ຕົ້ນທຶນຕົວຈິງຕໍ່ກ້ອນ:</span>
-                  <span className="font-bold text-slate-700">{Math.round(activeVirtualBillRecipe.totalCostPerUnit).toLocaleString()} ₭</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500">ກຳໄລຕໍ່ກ້ອນ:</span>
-                  <span className="font-bold text-emerald-600">+{Math.round(activeVirtualBillRecipe.netProfitPerUnit).toLocaleString()} ₭</span>
-                </div>
-                <div className="flex justify-between pt-1 border-t border-slate-100 text-sm font-black">
-                  <span>ຍອດຂາຍມື້ນີ້ ({activeVirtualBillRecipe.soldToday || 0} ກ້ອນ):</span>
-                  <span className="text-sky-600 font-bold">{Number(activeVirtualBillRecipe.revenueToday || 0).toLocaleString()} ₭</span>
-                </div>
-                <div className="flex justify-between font-black text-sm text-emerald-600">
-                  <span>ກຳໄລລວມມື້ນີ້:</span>
-                  <span>+{Math.round(activeVirtualBillRecipe.profitToday || 0).toLocaleString()} ₭</span>
-                </div>
-              </div>
-
-              <div className="text-center pt-1">
-                <p className="text-[10px] text-slate-400 italic">Freshly Baked Everyday at Le Ouve</p>
-              </div>
             </motion.div>
           </div>
         )}
