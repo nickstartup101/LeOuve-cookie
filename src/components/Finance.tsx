@@ -9,7 +9,7 @@ import {
   DollarSign, TrendingUp, Wallet, CreditCard, 
   Plus, Trash2, ArrowUpRight, ArrowDownRight,
   Download, QrCode, Building2,
-  HandCoins, Receipt, Upload, Eye, Target, Sliders, Calculator, Sparkles, BookOpen
+  HandCoins, Receipt, Upload, Eye, Target, Sliders, Calculator, Sparkles, CheckCircle2, Clock
 } from 'lucide-react';
 import { 
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip 
@@ -51,20 +51,18 @@ export type ExpenseBucket = 'cogs' | 'opex' | 'capex' | 'dividend';
 
 export default function Finance({ userSettings }: { userSettings?: any }) {
   const { i18n } = useTranslation();
-  // 3 Sub-tabs: ທຸລະກຳ / ໜີ້ສິນ / ຄຳນວນຄືນທຶນຕາມສູດ
   const [subView, setSubView] = useState<'transactions' | 'debts' | 'breakeven'>('transactions');
 
   const [transactions, setTransactions] = useState<any[]>([]);
   const [supplierPrices, setSupplierPrices] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
-  const [recipes, setRecipes] = useState<any[]>([]);
   const [debts, setDebts] = useState<any[]>([]);
 
-  // View Filter: All-Time vs Monthly
+  // Time Filter
   const [timeFilter, setTimeFilter] = useState<'all' | 'monthly'>('all');
   const [selectedMonth, setSelectedMonth] = useState<string>(format(new Date(), 'yyyy-MM'));
 
-  // Form State: Transactions
+  // Transactions Form
   const [type, setType] = useState<'income' | 'expense'>('income');
   const [amount, setAmount] = useState<string>('');
   const [category, setCategory] = useState('ຂາຍເຄື່ອງດື່ມ & ກາເຟ (Coffee & Drinks)');
@@ -79,7 +77,7 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
   // Edit Bucket (ປ່ຽນ 40 ລ້ານ ເປັນ CAPEX)
   const [editingBucketTx, setEditingBucketTx] = useState<any | null>(null);
 
-  // Form State: Debts (AP / AR)
+  // Debts Form (AP/AR)
   const [debtType, setDebtType] = useState<'payable' | 'receivable'>('payable');
   const [debtPerson, setDebtPerson] = useState('');
   const [debtAmount, setDebtAmount] = useState('');
@@ -87,19 +85,18 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
   const [debtReceiptImage, setDebtReceiptImage] = useState('');
   const [debtRemark, setDebtRemark] = useState('');
 
-  // 🎯 RECIPE-DRIVEN BREAK-EVEN & PAYBACK SIMULATOR
-  const [selectedRecipeId, setSelectedRecipeId] = useState<string>('');
-  const [initialInvestment, setInitialInvestment] = useState<number>(40000000); // ຄ່າຮຽນສູດ 40 ລ້ານ
-  const [fixedMonthlyOpex, setFixedMonthlyOpex] = useState<number>(12000000);   // ຄ່າເຊົ່າ-ເງິນເດືອນ 12 ລ້ານ/ເດືອນ
-  const [customPricePerUnit, setCustomPricePerUnit] = useState<number>(23000);
-  const [customCostPerUnit, setCustomCostPerUnit] = useState<number>(10500);
-  const [simulatedDailyVolume, setSimulatedDailyVolume] = useState<number>(25);
+  // 🎯 SALES TARGET & PAYBACK FORMULA PLANNER STATE
+  const [targetMonths, setTargetMonths] = useState<number>(7);         // 🌟 ເປົ້າໝາຍຄືນທຶນ: 7 ເດືອນ
+  const [investmentGoal, setInvestmentGoal] = useState<number>(40000000); // ເງິນລົງທຶນ: 40 ລ້ານ
+  const [monthlyOpex, setMonthlyOpex] = useState<number>(12000000);       // ຄ່າເຊົ່າ-ເງິນເດືອນ: 12 ລ້ານ/ເດືອນ
+  const [unitSellingPrice, setUnitSellingPrice] = useState<number>(25000); // ລາຄາຂາຍ/ກ້ອນ: 25,000 ₭
+  const [unitVariableCost, setUnitVariableCost] = useState<number>(11000); // ຕົ້ນທຶນວັດຖຸດິບ/ກ້ອນ: 11,000 ₭
 
   const [isSupplierModalOpen, setIsSupplierModalOpen] = useState(false);
   const [selectedSupplierItems, setSelectedSupplierItems] = useState<{ [id: string]: boolean }>({});
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
-  // 🌟 Realtime Listeners with Client-Side Safe Sorting (ແກ້ໄຂ Index Error 100%)
+  // Firestore Listeners with Client-Side Safe Sorting (ບໍ່ມີ Error Index)
   useEffect(() => {
     const unsubTx = onSnapshot(collection(db, 'transactions'), snap => {
       const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -108,37 +105,22 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
     }, err => handleFirestoreError(err, OperationType.LIST, 'transactions'));
 
     const unsubSp = onSnapshot(collection(db, 'supplierPrices'), snap => {
-      const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      setSupplierPrices(data);
+      setSupplierPrices(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     }, err => handleFirestoreError(err, OperationType.LIST, 'supplierPrices'));
 
     const unsubPr = onSnapshot(collection(db, 'products'), snap => {
       setProducts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     }, err => handleFirestoreError(err, OperationType.LIST, 'products'));
 
-    const unsubR = onSnapshot(collection(db, 'recipes'), snap => {
-      const recs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      setRecipes(recs);
-      if (recs.length > 0 && !selectedRecipeId) {
-        setSelectedRecipeId(recs[0].id);
-      }
-    }, err => handleFirestoreError(err, OperationType.LIST, 'recipes'));
-
-    // ✨ ປັບປຸງ: ດຶງ Debts ໂດຍບໍ່ໃຊ້ Firestore orderBy ເພື່ອປ້ອງກັນຈໍຂາວ 100%
     const unsubDebts = onSnapshot(collection(db, 'debts'), snap => {
       const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      data.sort((a: any, b: any) => {
-        const tA = a.createdAt?.toDate?.()?.getTime() || 0;
-        const tB = b.createdAt?.toDate?.()?.getTime() || 0;
-        return tB - tA;
-      });
+      data.sort((a: any, b: any) => (b.createdAt?.toDate?.()?.getTime() || 0) - (a.createdAt?.toDate?.()?.getTime() || 0));
       setDebts(data);
     }, err => console.error("Debts load error:", err));
 
-    return () => { unsubTx(); unsubSp(); unsubPr(); unsubR(); unsubDebts(); };
+    return () => { unsubTx(); unsubSp(); unsubPr(); unsubDebts(); };
   }, []);
 
-  // Filter transactions by All-Time or Monthly
   const filteredTransactions = useMemo(() => {
     if (timeFilter === 'monthly') {
       return transactions.filter(t => t.date && String(t.date).startsWith(selectedMonth));
@@ -146,10 +128,8 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
     return transactions;
   }, [transactions, timeFilter, selectedMonth]);
 
-  // Financial Metrics
   const metrics = useMemo(() => {
     let totalIncome = 0, totalExpense = 0, cogsTotal = 0, opexTotal = 0, capexTotal = 0, dividendTotal = 0;
-
     filteredTransactions.forEach(t => {
       const amt = Number(t.amount) || 0;
       if (t.type === 'income') {
@@ -164,119 +144,68 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
       }
     });
 
-    const grossProfit = totalIncome - cogsTotal;
-    const grossMarginPercent = totalIncome > 0 ? (grossProfit / totalIncome) * 100 : 0;
-    const netProfit = totalIncome - (cogsTotal + opexTotal + capexTotal);
-    const netMarginPercent = totalIncome > 0 ? (netProfit / totalIncome) * 100 : 0;
-    const totalInvest = cogsTotal + opexTotal + capexTotal;
-    const roiPercent = totalInvest > 0 ? (netProfit / totalInvest) * 100 : 0;
-
-    return { totalIncome, totalExpense, cogsTotal, opexTotal, capexTotal, dividendTotal, grossProfit, grossMarginPercent, netProfit, netMarginPercent, roiPercent };
+    return { totalIncome, totalExpense, cogsTotal, opexTotal, capexTotal, dividendTotal };
   }, [filteredTransactions]);
 
-  // 🌟 NULL-SAFE DEBT METRICS (ປ້ອງກັນ Crash 100%)
   const debtMetrics = useMemo(() => {
     const list = Array.isArray(debts) ? debts : [];
-    const totalPayable = list
-      .filter(d => d && d.type === 'payable' && d.status !== 'settled')
-      .reduce((sum, d) => sum + (Number(d?.amount) || 0), 0);
-
-    const totalReceivable = list
-      .filter(d => d && d.type === 'receivable' && d.status !== 'settled')
-      .reduce((sum, d) => sum + (Number(d?.amount) || 0), 0);
-
+    const totalPayable = list.filter(d => d && d.type === 'payable' && d.status !== 'settled').reduce((sum, d) => sum + (Number(d?.amount) || 0), 0);
+    const totalReceivable = list.filter(d => d && d.type === 'receivable' && d.status !== 'settled').reduce((sum, d) => sum + (Number(d?.amount) || 0), 0);
     return { totalPayable, totalReceivable };
   }, [debts]);
 
-  // Calculate Unit Costs for Recipes
-  const calculatedRecipes = useMemo(() => {
-    return recipes.map(recipe => {
-      let rawBatchCost = 0;
-      const yieldCount = Math.max(1, Number(recipe.batchYield) || 1);
+  // 🎯 FORMULA CALCULATIONS: ສູດຄິດໄລ່ເປົ້າໝາຍຍອດຂາຍ & ໄລຍະເວລາຄືນທຶນ
+  const salesPlannerFormula = useMemo(() => {
+    // 1. ກຳໄລສ່ວນເກີນຕໍ່ກ້ອນ (Contribution Margin)
+    const marginPerUnit = Math.max(0, unitSellingPrice - unitVariableCost);
+    const marginPercent = unitSellingPrice > 0 ? (marginPerUnit / unitSellingPrice) * 100 : 0;
 
-      (recipe.ingredients || []).forEach((ing: any) => {
-        const uCost = Number(ing.unitCostLAK) || 0;
-        const amt = Number(ing.amount) || 0;
-        const u = String(ing.unit || 'g').toLowerCase().trim();
-        let bUnits = amt;
-        if (u === 'tsp' || u === 'ຊ້ອນຊາ') bUnits = amt * 5;
-        else if (u === 'tbsp' || u === 'ຊ້ອນໂຕະ') baseUnits = amt * 15;
-        rawBatchCost += bUnits * uCost;
-      });
+    // 2. ຈຸດຄຸ້ມທຶນລາຍວັນເພື່ອລອດ OPEX (Daily BEP for OPEX)
+    const dailyBETOpex = marginPerUnit > 0 ? Math.ceil(monthlyOpex / (marginPerUnit * 30)) : 0;
+    const monthlyBETOpex = dailyBETOpex * 30;
 
-      const overhead = Number(recipe.overheadCost) || 0;
-      const rawCostPerUnit = rawBatchCost / yieldCount;
-      const totalCostPerUnit = rawCostPerUnit + overhead;
-      const price = Number(recipe.sellingPrice) || 0;
+    // 3. ເປົ້າໝາຍກຳໄລທີ່ຕ້ອງເກັບຕໍ່ເດືອນເພື່ອຄືນທຶນພາຍໃນ T ເດືອນ
+    const safeMonths = Math.max(1, targetMonths);
+    const monthlyRecoveryQuota = investmentGoal / safeMonths;
 
+    // 4. ກຳໄລລວມທີ່ຕ້ອງເຮັດໃຫ້ໄດ້ຕໍ່ເດືອນ (OPEX + ເງິນຄືນທຶນ)
+    const totalGrossProfitNeededMonthly = monthlyOpex + monthlyRecoveryQuota;
+
+    // 5. ຈຳນວນກ້ອນທີ່ຕ້ອງຂາຍຕໍ່ເດືອນ & ຕໍ່ວັນ ເພື່ອຄືນທຶນໃນ T ເດືອນ (🌟 ສູດຫຼັກ!)
+    const targetMonthlyPieces = marginPerUnit > 0 ? Math.ceil(totalGrossProfitNeededMonthly / marginPerUnit) : 0;
+    const targetDailyPieces = Math.ceil(targetMonthlyPieces / 30);
+    const targetDailyRevenue = targetDailyPieces * unitSellingPrice;
+    const targetMonthlyRevenue = targetMonthlyPieces * unitSellingPrice;
+
+    // 6. ຈຳນວນກ້ອນທັງໝົດທີ່ຕ້ອງຂາຍຕະຫຼອດຊີວິດເພື່ອຄືນທຶນ 40 ລ້ານ
+    const totalPiecesToRecoverAll = marginPerUnit > 0 ? Math.ceil(investmentGoal / marginPerUnit) : 0;
+
+    // 7. Month-by-Month Payback Timeline (1 ຫາ T ເດືອນ)
+    const timeline = Array.from({ length: Math.min(12, safeMonths) }, (_, i) => {
+      const monthNum = i + 1;
+      const accumulatedRecovered = Math.min(investmentGoal, monthNum * monthlyRecoveryQuota);
+      const percentDone = Math.min(100, (accumulatedRecovered / investmentGoal) * 100);
       return {
-        ...recipe,
-        rawCostPerUnit,
-        totalCostPerUnit,
-        price
+        month: `ເດືອນ ${monthNum}`,
+        accumulatedRecovered,
+        percentDone
       };
     });
-  }, [recipes]);
-
-  // 🎯 RECIPE-DRIVEN BREAK-EVEN & PAYBACK SIMULATOR
-  const activeBepData = useMemo(() => {
-    const selectedRec = calculatedRecipes.find(r => r.id === selectedRecipeId);
-
-    // ດຶງລາຄາຂາຍ ແລະ ຕົ້ນທຶນຈາກສູດທີ່ເລືອກ
-    const unitPrice = selectedRec && selectedRec.price > 0 ? selectedRec.price : customPricePerUnit;
-    const unitCost = selectedRec && selectedRec.totalCostPerUnit > 0 ? selectedRec.totalCostPerUnit : customCostPerUnit;
-
-    // 1. Contribution Margin ຕໍ່ກ້ອນ/ຈອກ
-    const marginPerUnit = Math.max(0, unitPrice - unitCost);
-    const marginRatio = unitPrice > 0 ? (marginPerUnit / unitPrice) * 100 : 0;
-
-    // 2. Break-Even Volume (ຕ້ອງຂາຍສູດນີ້ຈັກກ້ອນ/ວັນ ຈຶ່ງຈະກວມເອົາ OPEX)
-    const monthlyBreakEvenUnits = marginPerUnit > 0 ? Math.ceil(fixedMonthlyOpex / marginPerUnit) : 0;
-    const dailyBreakEvenUnits = Math.ceil(monthlyBreakEvenUnits / 30);
-    const monthlyBreakEvenRevenue = monthlyBreakEvenUnits * unitPrice;
-
-    // 3. ຈຳນວນກ້ອນທັງໝົດທີ່ຕ້ອງຂາຍເພື່ອຄືນທຶນຄ່າສູດ CAPEX 40 ລ້ານ!
-    const totalUnitsToPaybackCapex = marginPerUnit > 0 ? Math.ceil(initialInvestment / marginPerUnit) : 0;
-
-    // 4. Projection ຕາມຍອດຂາຍຈຳລອງ (ຈອກ/ວັນ)
-    const monthlyVolume = simulatedDailyVolume * 30;
-    const projectedMonthlyRevenue = monthlyVolume * unitPrice;
-    const projectedGrossProfit = monthlyVolume * marginPerUnit;
-    const projectedNetProfit = projectedGrossProfit - fixedMonthlyOpex;
-
-    // 5. Payback Period
-    let paybackText = '';
-    if (projectedNetProfit > 0) {
-      const months = initialInvestment / projectedNetProfit;
-      const years = Math.floor(months / 12);
-      const remMonths = Math.round(months % 12);
-      paybackText = years > 0 ? `${years} ປີ ${remMonths > 0 ? `${remMonths} ເດືອນ` : ''}` : `${months.toFixed(1)} ເດືອນ`;
-    } else {
-      paybackText = 'ຍັງບໍ່ຄືນທຶນ (ກຳໄລບໍ່ພໍ OPEX)';
-    }
-
-    // Chart Points
-    const chartSteps = [10, 20, 30, 40, 50, 60, 80, 100, 120];
-    const simulationChart = chartSteps.map(vol => ({
-      dailyVolume: `${vol} ກ້ອນ`,
-      Revenue: vol * 30 * unitPrice,
-      TotalCost: fixedMonthlyOpex + (vol * 30 * unitCost)
-    }));
 
     return {
-      selectedRec,
-      unitPrice,
-      unitCost,
       marginPerUnit,
-      marginRatio,
-      dailyBreakEvenUnits,
-      monthlyBreakEvenRevenue,
-      totalUnitsToPaybackCapex,
-      projectedNetProfit,
-      paybackText,
-      simulationChart
+      marginPercent,
+      dailyBETOpex,
+      monthlyBETOpex,
+      monthlyRecoveryQuota,
+      targetDailyPieces,
+      targetMonthlyPieces,
+      targetDailyRevenue,
+      targetMonthlyRevenue,
+      totalPiecesToRecoverAll,
+      timeline
     };
-  }, [calculatedRecipes, selectedRecipeId, customPricePerUnit, customCostPerUnit, initialInvestment, fixedMonthlyOpex, simulatedDailyVolume]);
+  }, [targetMonths, investmentGoal, monthlyOpex, unitSellingPrice, unitVariableCost]);
 
   const handleAddTransaction = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -324,7 +253,6 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
     setDebtAmount('');
     setDebtReceiptImage('');
     setDebtRemark('');
-    alert("ບັນທຶກໜີ້ສິນສຳເລັດແລ້ວ!");
   };
 
   const handleConfirmImportSupplierItems = async () => {
@@ -381,6 +309,16 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
     setEditingBucketTx(null);
   };
 
+  const groupedSupplierPricesByDate = useMemo(() => {
+    const groups: { [dateStr: string]: any[] } = {};
+    supplierPrices.forEach(sp => {
+      const d = sp.date || 'No Date';
+      if (!groups[d]) groups[d] = [];
+      groups[d].push(sp);
+    });
+    return groups;
+  }, [supplierPrices]);
+
   return (
     <div className="space-y-6 font-sans pb-16">
       
@@ -391,7 +329,7 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
             Le Ouve Corporate Finance
           </span>
           <h1 className="text-2xl md:text-3xl font-serif text-slate-800 dark:text-white mt-1">
-            Financial Ledger, Debts & Break-Even
+            Financial Ledger & Sales Target Planning
           </h1>
           <p className="text-xs text-slate-400 mt-0.5">
             {timeFilter === 'monthly' ? `ສະແດງຂໍ້ມູນປະຈຳເດືອນ: ${selectedMonth}` : 'ສະແດງຂໍ້ມູນການເງິນສະສົມທັງໝົດ (All-Time)'}
@@ -400,34 +338,16 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
 
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center bg-slate-100 dark:bg-neutral-900 p-1 rounded-2xl border border-slate-200 dark:border-neutral-800">
-            <button
-              onClick={() => setTimeFilter('all')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer ${timeFilter === 'all' ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950' : 'text-slate-400'}`}
-            >
-              ທັງໝົດ
-            </button>
-            <button
-              onClick={() => setTimeFilter('monthly')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer ${timeFilter === 'monthly' ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950' : 'text-slate-400'}`}
-            >
-              ລາຍເດືອນ
-            </button>
+            <button onClick={() => setTimeFilter('all')} className={`px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer ${timeFilter === 'all' ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950 shadow-xs' : 'text-slate-400'}`}>ທັງໝົດ</button>
+            <button onClick={() => setTimeFilter('monthly')} className={`px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer ${timeFilter === 'monthly' ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950 shadow-xs' : 'text-slate-400'}`}>ລາຍເດືອນ</button>
           </div>
 
           {timeFilter === 'monthly' && (
-            <input
-              type="month"
-              value={selectedMonth}
-              onChange={e => setSelectedMonth(e.target.value)}
-              className="crystal-input !py-1.5 !text-xs font-mono font-bold"
-            />
+            <input type="month" value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} className="crystal-input !py-1.5 !text-xs font-mono font-bold" />
           )}
 
           {subView === 'transactions' && (
-            <button
-              onClick={() => setIsSupplierModalOpen(true)}
-              className="crystal-button !py-2.5 !px-4 flex items-center gap-2 cursor-pointer"
-            >
+            <button onClick={() => setIsSupplierModalOpen(true)} className="crystal-button !py-2.5 !px-4 flex items-center gap-2 cursor-pointer">
               <Receipt className="w-4 h-4" />
               <span>ດຶງຈາກໃບບິນ Supplier</span>
             </button>
@@ -441,7 +361,7 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
           onClick={() => setSubView('transactions')}
           className={`px-4 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer ${subView === 'transactions' ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950' : 'bg-white dark:bg-[#141414] border border-slate-200 dark:border-neutral-800 text-slate-400'}`}
         >
-          ບັນຊີລາຍຮັບ-ລາຍຈ່າຍ
+          ບັນຊີລາຍຮັບ-ລາຍຈ່າຍ (Ledger)
         </button>
         <button
           onClick={() => setSubView('debts')}
@@ -455,7 +375,7 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
           className={`px-4 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${subView === 'breakeven' ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950' : 'bg-white dark:bg-[#141414] border border-slate-200 dark:border-neutral-800 text-slate-400'}`}
         >
           <Target className="w-3.5 h-3.5 text-amber-500" />
-          <span>🎯 ຄຳນວນຄືນທຶນຕາມສູດສິນຄ້າ (Break-Even)</span>
+          <span>🎯 ສູດຄຳນວນເປົ້າໝາຍຍອດຂາຍ & ຄືນທຶນ (Payback Planner)</span>
         </button>
       </div>
 
@@ -489,7 +409,6 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
             <div className="lg:col-span-4">
               <div className="high-density-card p-6 space-y-4 sticky top-20">
                 <h3 className="text-sm font-serif text-slate-800 dark:text-white border-b border-slate-100 dark:border-neutral-800 pb-3">ບັນທຶກລາຍການໃໝ່</h3>
-                
                 <form onSubmit={handleAddTransaction} className="space-y-4">
                   <div className="grid grid-cols-2 gap-2 bg-slate-100 dark:bg-neutral-900 p-1 rounded-2xl">
                     <button type="button" onClick={() => setType('income')} className={`py-2 text-xs font-bold rounded-xl cursor-pointer ${type === 'income' ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950' : 'text-slate-400'}`}>+ ລາຍຮັບ</button>
@@ -531,8 +450,8 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
                   </div>
 
                   <div>
-                    <label className="label-xs flex justify-between mb-1"><span>ຮູບໃບບິນ (Ctrl+V ວາງໄດ້)</span></label>
-                    <div className="border border-dashed border-slate-200 dark:border-neutral-700 rounded-xl p-2.5 relative flex items-center justify-between hover:bg-slate-50 dark:hover:bg-neutral-800/40 transition-colors">
+                    <label className="label-xs flex justify-between mb-1"><span>ຮູບໃບບິນ (Ctrl+V)</span></label>
+                    <div className="border border-dashed border-slate-200 dark:border-neutral-700 rounded-xl p-2.5 relative flex items-center justify-between hover:bg-slate-50 dark:hover:bg-neutral-800/40">
                       <input type="file" accept="image/*" onChange={async (e) => {
                         const file = e.target.files?.[0];
                         if (file) setReceiptImage(await compressImage(file));
@@ -565,7 +484,7 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
               <div className="high-density-card p-5 overflow-hidden">
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="text-sm font-serif text-slate-800 dark:text-white">ປະຫວັດທຸລະກຳ</h3>
-                  <span className="text-[10px] text-slate-400">ຄລິກທີ່ປ້າຍກຸ່ມຕົ້ນທຶນເພື່ອປ່ຽນ OPEX ➔ CAPEX ໄດ້</span>
+                  <span className="text-[10px] text-slate-400">ຄລິກປ້າຍກຸ່ມຕົ້ນທຶນເພື່ອປ່ຽນ OPEX ➔ CAPEX ໄດ້</span>
                 </div>
 
                 <div className="overflow-x-auto">
@@ -597,7 +516,6 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
                                 t.expenseBucket === 'dividend' ? 'bg-pink-500/10 text-pink-400 border border-pink-500/20' :
                                 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
                               }`}
-                              title="ກົດເພື່ອປ່ຽນປະເພດ (OPEX ➔ CAPEX)"
                             >
                               {t.expenseBucket ? t.expenseBucket.toUpperCase() : (t.type === 'income' ? 'INCOME' : 'OPEX')} ✏️
                             </span>
@@ -628,21 +546,17 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
         </>
       )}
 
-      {/* VIEW 2: DEBTS (AP / AR) 🌟 ແກ້ໄຂຈໍຂາວ 100% ດ້ວຍ NULL-SAFETY */}
+      {/* VIEW 2: DEBTS (AP / AR) */}
       {subView === 'debts' && (
         <div className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="high-density-card p-6">
               <span className="label-xs text-rose-500">ໜີ້ຕ້ອງສົ່ງທັງໝົດ (AP - ຕິດໜີ້ເພິ່ນ)</span>
-              <h2 className="text-2xl font-serif font-bold text-rose-600 dark:text-rose-400 mt-2">
-                {(debtMetrics?.totalPayable || 0).toLocaleString()} ₭
-              </h2>
+              <h2 className="text-2xl font-serif font-bold text-rose-600 dark:text-rose-400 mt-2">{(debtMetrics?.totalPayable || 0).toLocaleString()} ₭</h2>
             </div>
             <div className="high-density-card p-6">
               <span className="label-xs text-emerald-500">ໜີ້ຕ້ອງຮັບທັງໝົດ (AR - ລູກຄ້າຕິດໜີ້)</span>
-              <h2 className="text-2xl font-serif font-bold text-emerald-600 dark:text-emerald-400 mt-2">
-                {(debtMetrics?.totalReceivable || 0).toLocaleString()} ₭
-              </h2>
+              <h2 className="text-2xl font-serif font-bold text-emerald-600 dark:text-emerald-400 mt-2">{(debtMetrics?.totalReceivable || 0).toLocaleString()} ₭</h2>
             </div>
           </div>
 
@@ -652,8 +566,8 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
                 <h3 className="text-sm font-serif text-slate-800 dark:text-white">ບັນທຶກໜີ້ສິນ (AP/AR)</h3>
                 <form onSubmit={handleAddDebt} className="space-y-3">
                   <div className="grid grid-cols-2 gap-1.5 bg-slate-100 dark:bg-neutral-900 p-1 rounded-2xl">
-                    <button type="button" onClick={() => setDebtType('payable')} className={`py-2 text-xs font-bold rounded-xl cursor-pointer ${debtType === 'payable' ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950' : 'text-slate-400'}`}>ໜີ້ຕ້ອງສົ່ງ (AP)</button>
-                    <button type="button" onClick={() => setDebtType('receivable')} className={`py-2 text-xs font-bold rounded-xl cursor-pointer ${debtType === 'receivable' ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950' : 'text-slate-400'}`}>ໜີ້ຕ້ອງຮັບ (AR)</button>
+                    <button type="button" onClick={() => setDebtType('payable')} className={`py-2 text-xs font-bold rounded-xl ${debtType === 'payable' ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950' : 'text-slate-400'}`}>ໜີ້ຕ້ອງສົ່ງ (AP)</button>
+                    <button type="button" onClick={() => setDebtType('receivable')} className={`py-2 text-xs font-bold rounded-xl ${debtType === 'receivable' ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950' : 'text-slate-400'}`}>ໜີ້ຕ້ອງຮັບ (AR)</button>
                   </div>
 
                   <div>
@@ -669,25 +583,6 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
                   <div>
                     <label className="label-xs block mb-1">ກຳນົດຊຳລະ</label>
                     <input type="date" required value={debtDueDate} onChange={e => setDebtDueDate(e.target.value)} className="crystal-input w-full !text-xs font-mono" />
-                  </div>
-
-                  <div>
-                    <label className="label-xs flex justify-between mb-1"><span>ຮູບຫຼັກຖານໜີ້ສິນ (Ctrl+V)</span></label>
-                    <div className="border border-dashed border-slate-200 dark:border-neutral-700 rounded-xl p-2 relative flex items-center justify-between">
-                      <input type="file" accept="image/*" onChange={async (e) => {
-                        const file = e.target.files?.[0];
-                        if (file) setDebtReceiptImage(await compressImage(file));
-                      }} className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" />
-                      {debtReceiptImage ? (
-                        <div className="flex items-center gap-2 w-full justify-between">
-                          <img src={debtReceiptImage} alt="Receipt" className="w-8 h-8 rounded-lg object-cover" />
-                          <span className="text-[10px] text-emerald-500 font-bold">ອັບໂຫຼດຮູບແລ້ວ ✓</span>
-                          <button type="button" onClick={(e) => { e.stopPropagation(); setDebtReceiptImage(''); }} className="text-rose-500 p-1">✕</button>
-                        </div>
-                      ) : (
-                        <span className="text-xs text-slate-400 mx-auto flex items-center gap-1.5"><Upload className="w-3.5 h-3.5" /> ວາງຮູບຫຼັກຖານ</span>
-                      )}
-                    </div>
                   </div>
 
                   <button type="submit" className="crystal-button w-full h-11">ບັນທຶກໜີ້ສິນ</button>
@@ -706,7 +601,6 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
                         <th className="p-3">ຊື່ຄູ່ຄ້າ</th>
                         <th className="p-3">ກຳນົດຊຳລະ</th>
                         <th className="p-3 text-right">ຈຳນວນເງິນ</th>
-                        <th className="p-3 text-center">ໃບບິນ</th>
                         <th className="p-3 text-center">ສະຖານະ</th>
                         <th className="p-3 text-center">ລຶບ</th>
                       </tr>
@@ -723,39 +617,18 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
                             </td>
                             <td className="p-3 font-bold text-slate-800 dark:text-white">{d.person || 'General'}</td>
                             <td className="p-3 font-mono text-slate-400">{d.dueDate || '-'}</td>
-                            <td className="p-3 text-right font-mono font-bold">
-                              {Number(d.amount || 0).toLocaleString()} ₭
-                            </td>
+                            <td className="p-3 text-right font-mono font-bold">{Number(d.amount || 0).toLocaleString()} ₭</td>
                             <td className="p-3 text-center">
-                              {d.receiptImage ? (
-                                <button onClick={() => setPreviewImage(d.receiptImage)} className="p-1 rounded bg-emerald-500/10 text-emerald-500">
-                                  <Eye className="w-3.5 h-3.5" />
-                                </button>
-                              ) : '-'}
-                            </td>
-                            <td className="p-3 text-center">
-                              <button
-                                onClick={() => updateDoc(doc(db, 'debts', d.id), { status: d.status === 'settled' ? 'pending' : 'settled' })}
-                                className={`px-2.5 py-1 rounded-xl text-[9px] font-bold cursor-pointer ${d.status === 'settled' ? 'bg-emerald-500 text-white' : 'bg-amber-500/10 text-amber-500'}`}
-                              >
+                              <button onClick={() => updateDoc(doc(db, 'debts', d.id), { status: d.status === 'settled' ? 'pending' : 'settled' })} className={`px-2.5 py-1 rounded-xl text-[9px] font-bold ${d.status === 'settled' ? 'bg-emerald-500 text-white' : 'bg-amber-500/10 text-amber-500'}`}>
                                 {d.status === 'settled' ? 'ຊຳລະແລ້ວ ✓' : 'ຄ້າງຊຳລະ'}
                               </button>
                             </td>
                             <td className="p-3 text-center">
-                              <button onClick={() => deleteDoc(doc(db, 'debts', d.id))} className="text-slate-400 hover:text-rose-500 cursor-pointer">
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
+                              <button onClick={() => deleteDoc(doc(db, 'debts', d.id))} className="text-slate-400 hover:text-rose-500"><Trash2 className="w-3.5 h-3.5" /></button>
                             </td>
                           </tr>
                         );
                       })}
-                      {(!debts || debts.length === 0) && (
-                        <tr>
-                          <td colSpan={7} className="py-8 text-center text-slate-400 italic">
-                            ຍັງບໍ່ມີລາຍການໜີ້ສິນ. ບັນທຶກໜີ້ຕ້ອງສົ່ງ/ໜີ້ຕ້ອງຮັບທາງຊ້າຍມືໄດ້ເລີຍ!
-                          </td>
-                        </tr>
-                      )}
                     </tbody>
                   </table>
                 </div>
@@ -765,271 +638,218 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
         </div>
       )}
 
-      {/* 🌟 VIEW 3: RECIPE-DRIVEN BREAK-EVEN & PAYBACK SIMULATOR (ຄຳນວນຄືນທຶນຕາມສູດສິນຄ້າ) */}
+      {/* 🎯 VIEW 3: SALES TARGET & PAYBACK FORMULA PLANNER (ສູດຄິດໄລ່ເປົ້າໝາຍຍອດຂາຍຕົວຈິງ) */}
       {subView === 'breakeven' && (
         <div className="space-y-6">
           
-          {/* Header Card: ເລືອກສູດສິນຄ້າ */}
-          <div className="high-density-card p-6 space-y-4">
-            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 border-b border-slate-100 dark:border-neutral-800 pb-3">
-              <div>
-                <h3 className="text-base font-serif text-slate-800 dark:text-white flex items-center gap-2">
-                  <BookOpen className="w-4 h-4 text-emerald-500" />
-                  <span>ເລືອກສູດສິນຄ້າເພື່ອຄຳນວນການຄືນທຶນ (Recipe-Driven Break-Even)</span>
-                </h3>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  ລະບົບຈະດຶງລາຄາຂາຍ ແລະ ຕົ້ນທຶນຕົວຈິງຕໍ່ກ້ອນ/ຈອກຂອງສູດນັ້ນມາຄິດໄລ່ໃຫ້ອັດຕະໂນມັດ
-                </p>
-              </div>
-
-              {/* Recipe Selector Dropdown */}
-              <div className="w-full sm:w-72">
-                <select
-                  value={selectedRecipeId}
-                  onChange={e => setSelectedRecipeId(e.target.value)}
-                  className="crystal-input w-full font-bold !py-2 text-xs cursor-pointer"
-                >
-                  <option value="">-- ເລືອກສູດສິນຄ້າໃນຮ້ານ --</option>
-                  {calculatedRecipes.map(r => (
-                    <option key={r.id} value={r.id}>
-                      {r.menuName} (ຂາຍ: {Number(r.price).toLocaleString()} ₭)
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {/* Recipe Information Card */}
-            {activeBepData.selectedRec && (
-              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-[#1a1a1a] border border-slate-200/60 dark:border-neutral-800 flex flex-col sm:flex-row justify-between sm:items-center gap-4">
-                <div className="flex items-center gap-3">
-                  {activeBepData.selectedRec.recipeImage ? (
-                    <img src={activeBepData.selectedRec.recipeImage} alt={activeBepData.selectedRec.menuName} className="w-12 h-12 rounded-xl object-cover border border-neutral-700" />
-                  ) : (
-                    <div className="w-12 h-12 rounded-xl bg-neutral-200 dark:bg-neutral-800 flex items-center justify-center text-slate-400">
-                      <BookOpen className="w-5 h-5" />
-                    </div>
-                  )}
-                  <div>
-                    <h4 className="text-sm font-bold text-slate-800 dark:text-white">{activeBepData.selectedRec.menuName}</h4>
-                    <span className="text-xs font-mono text-sky-500 font-bold block mt-0.5">
-                      ລາຄາຂາຍ: {Number(activeBepData.unitPrice).toLocaleString()} ₭ | ຕົ້ນທຶນ: {Math.round(activeBepData.unitCost).toLocaleString()} ₭
-                    </span>
-                  </div>
-                </div>
-
-                <div className="text-right font-mono">
-                  <span className="text-[10px] text-slate-400 block uppercase">ກຳໄລສ່ວນເກີນຕໍ່ກ້ອນ/ຈອກ:</span>
-                  <span className="text-base font-black text-emerald-500">
-                    +{Math.round(activeBepData.marginPerUnit).toLocaleString()} ₭ ({activeBepData.marginRatio.toFixed(1)}%)
-                  </span>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* 4 Summary Cards */}
+          {/* 🌟 4 ANSWER CARDS: ສະຫຼຸບຄຳຕອບເປົ້າໝາຍຍອດຂາຍ */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* 1. Daily BEP */}
-            <div className="high-density-card p-5 space-y-1">
-              <span className="label-xs flex justify-between">
-                <span>ຈຸດຄຸ້ມທຶນຕໍ່ວັນ (Daily BEP)</span>
+            
+            {/* Card 1: ຕ້ອງຂາຍມື້ລະຈັກກ້ອນເພື່ອຄືນທຶນໃນ T ເດືອນ (ຄຳຕອບຫຼັກ!) */}
+            <div className="high-density-card p-6 space-y-1 bg-amber-500/5 dark:bg-amber-500/10 border-amber-500/30">
+              <span className="label-xs !text-amber-600 dark:text-amber-400 flex justify-between">
+                <span>ເປົ້າໝາຍຂາຍຕໍ່ວັນ (ຄືນທຶນໃນ {targetMonths} ເດືອນ)</span>
                 <Target className="w-4 h-4 text-amber-500" />
               </span>
-              <h2 className="text-2xl font-serif font-bold text-slate-800 dark:text-white mt-1">
-                {activeBepData.dailyBreakEvenUnits.toLocaleString()} <span className="text-xs font-sans font-normal opacity-70">ກ້ອນ/ວັນ</span>
+              <h2 className="text-3xl font-serif font-bold text-amber-600 dark:text-amber-400 mt-2 font-mono">
+                {salesPlannerFormula.targetDailyPieces.toLocaleString()} <span className="text-xs font-sans font-normal opacity-80">ກ້ອນ / ວັນ</span>
               </h2>
-              <span className="text-[10px] text-slate-400 block font-light">
-                ຕ້ອງຂາຍສູດນີ້ໃຫ້ໄດ້ {activeBepData.dailyBreakEvenUnits} ກ້ອນ/ວັນ ເພື່ອກວມ OPEX
+              <span className="text-[11px] text-slate-500 dark:text-neutral-400 block font-light pt-1">
+                ຍອດຂາຍທີ່ຕ້ອງໄດ້: <b className="text-slate-800 dark:text-white font-mono">{Math.round(salesPlannerFormula.targetDailyRevenue).toLocaleString()} ₭ / ວັນ</b>
               </span>
             </div>
 
-            {/* 2. Total Units to Payoff Capex 40M */}
-            <div className="high-density-card p-5 space-y-1">
+            {/* Card 2: ຂາຍຂັ້ນຕ່ຳຕໍ່ວັນເພື່ອລອດ OPEX (ຄ່າເຊົ່າ & ເງິນເດືອນ) */}
+            <div className="high-density-card p-6 space-y-1">
               <span className="label-xs flex justify-between">
-                <span>ຈຳນວນກ້ອນຄືນທຶນ 40 ລ້ານ</span>
+                <span>ຂາຍຂັ້ນຕ່ຳເພື່ອລອດ (BEP OPEX)</span>
                 <Calculator className="w-4 h-4 text-sky-500" />
               </span>
-              <h2 className="text-2xl font-serif font-bold text-slate-800 dark:text-white mt-1">
-                {activeBepData.totalUnitsToPaybackCapex.toLocaleString()} <span className="text-xs font-sans font-normal opacity-70">ກ້ອນ</span>
+              <h2 className="text-3xl font-serif font-bold text-slate-800 dark:text-white mt-2 font-mono">
+                {salesPlannerFormula.dailyBETOpex.toLocaleString()} <span className="text-xs font-sans font-normal opacity-70">ກ້ອນ / ວັນ</span>
               </h2>
-              <span className="text-[10px] text-slate-400 block font-light">
-                ຂາຍຄົບຈຳນວນນີ້ ຄ່າສູດ 40 ລ້ານຈະຄືນທຶນໝົດ!
+              <span className="text-[11px] text-slate-400 block font-light pt-1">
+                ກວມຄ່າເຊົ່າ & ເງິນເດືອນ {monthlyOpex.toLocaleString()} ₭/ເດືອນ
               </span>
             </div>
 
-            {/* 3. Expected Payback Period */}
-            <div className="high-density-card p-5 space-y-1">
+            {/* Card 3: ຈຳນວນກ້ອນທັງໝົດທີ່ຕ້ອງຂາຍເພື່ອຄືນ 40 ລ້ານ */}
+            <div className="high-density-card p-6 space-y-1">
               <span className="label-xs flex justify-between">
-                <span>ໄລຍະເວລາຄືນທຶນທັງໝົດ</span>
+                <span>ຈຳນວນກ້ອນທັງໝົດເພື່ອຄືນທຶນ</span>
                 <Sparkles className="w-4 h-4 text-emerald-500" />
               </span>
-              <h2 className="text-2xl font-serif font-bold text-emerald-500 mt-1">
-                {activeBepData.paybackText}
+              <h2 className="text-3xl font-serif font-bold text-emerald-500 mt-2 font-mono">
+                {salesPlannerFormula.totalPiecesToRecoverAll.toLocaleString()} <span className="text-xs font-sans font-normal opacity-70">ກ້ອນ</span>
               </h2>
-              <span className="text-[10px] text-slate-400 block font-light">
-                ອີງຕາມຍອດຂາຍ {simulatedDailyVolume} ກ້ອນ/ວັນ
+              <span className="text-[11px] text-slate-400 block font-light pt-1">
+                ກຳໄລສ່ວນເກີນ: <b className="text-emerald-500 font-mono">+{salesPlannerFormula.marginPerUnit.toLocaleString()} ₭ / ກ້ອນ</b> ({salesPlannerFormula.marginPercent.toFixed(0)}%)
               </span>
             </div>
 
-            {/* 4. Estimated Monthly Net Profit */}
-            <div className="high-density-card p-5 space-y-1">
+            {/* Card 4: ກຳໄລສຸດທິທີ່ຕ້ອງເກັບຕໍ່ເດືອນ */}
+            <div className="high-density-card p-6 space-y-1">
               <span className="label-xs flex justify-between">
-                <span>ກຳໄລສຸດທິຄາດຄະເນ/ເດືອນ</span>
-                <TrendingUp className="w-4 h-4 text-purple-500" />
+                <span>ເງິນຄືນທຶນທີ່ຕ້ອງຕັດ/ເດືອນ</span>
+                <Clock className="w-4 h-4 text-purple-500" />
               </span>
-              <h2 className={`text-2xl font-serif font-bold mt-1 ${activeBepData.projectedNetProfit >= 0 ? 'text-purple-500' : 'text-rose-500'}`}>
-                {Math.round(activeBepData.projectedNetProfit).toLocaleString()} ₭
+              <h2 className="text-3xl font-serif font-bold text-purple-500 mt-2 font-mono">
+                {Math.round(salesPlannerFormula.monthlyRecoveryQuota).toLocaleString()} <span className="text-xs font-sans font-normal opacity-70">₭</span>
               </h2>
-              <span className="text-[10px] text-slate-400 block font-light">
-                ຫຼັງຈາກຫັກຄ່າເຊົ່າ & ເງິນເດືອນແລ້ວ
+              <span className="text-[11px] text-slate-400 block font-light pt-1">
+                {investmentGoal.toLocaleString()} ₭ ÷ {targetMonths} ເດືອນ
               </span>
             </div>
+
           </div>
 
-          {/* Interactive Parameters & Simulation Slider Grid */}
+          {/* 🎛️ CONTROLS & FORMULA PARAMETERS */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             
-            {/* Left Parameters Control Card (5 cols) */}
-            <div className="lg:col-span-5 high-density-card p-6 space-y-5">
-              <h3 className="text-sm font-serif text-slate-800 dark:text-white flex items-center gap-2 border-b border-slate-100 dark:border-neutral-800 pb-3">
-                <Sliders className="w-4 h-4 text-amber-500" />
-                <span>ປັບຕົວກຳນົດການຈຳລອງ (Simulator)</span>
-              </h3>
+            {/* Left Control Panel (6 cols) */}
+            <div className="lg:col-span-6 high-density-card p-6 space-y-5">
+              <div className="flex justify-between items-center border-b border-slate-100 dark:border-neutral-800 pb-3">
+                <h3 className="text-sm font-serif text-slate-800 dark:text-white flex items-center gap-2">
+                  <Sliders className="w-4 h-4 text-amber-500" />
+                  <span>ປັບຕົວເລກເປົ້າໝາຍ & ເວລາຄືນທຶນ</span>
+                </h3>
+              </div>
 
-              {/* Slider: ຍອດຂາຍຄາດຄະເນ (ກ້ອນ/ວັນ) */}
-              <div className="p-4 rounded-2xl bg-amber-500/5 dark:bg-amber-500/10 border border-amber-500/20 space-y-2">
+              {/* 🌟 ປຸ່ມກົດເລືອກເປົ້າໝາຍດ່ວນ: 3 ເດືອນ, 6 ເດືອນ, 7 ເດືອນ, 12 ເດືອນ */}
+              <div className="space-y-2 p-4 rounded-2xl bg-slate-50 dark:bg-[#1a1a1a] border border-slate-200/60 dark:border-neutral-800">
                 <div className="flex justify-between items-center text-xs">
-                  <span className="font-bold text-slate-700 dark:text-neutral-200">ຈຳລອງຍອດຂາຍຕໍ່ວັນ:</span>
-                  <span className="font-mono font-black text-amber-600 dark:text-amber-400 bg-amber-500/20 px-2.5 py-0.5 rounded-lg text-sm">
-                    {simulatedDailyVolume} ກ້ອນ/ວັນ
+                  <span className="font-bold text-slate-700 dark:text-neutral-200">ເປົ້າໝາຍຢາກຄືນທຶນພາຍໃນ:</span>
+                  <span className="font-mono font-black text-amber-500 bg-amber-500/10 px-3 py-1 rounded-xl text-sm border border-amber-500/20">
+                    {targetMonths} ເດືອນ
                   </span>
                 </div>
+
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {[3, 6, 7, 9, 12, 18, 24].map(m => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => setTargetMonths(m)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold transition-all cursor-pointer ${
+                        targetMonths === m 
+                          ? 'bg-amber-500 text-white shadow-sm' 
+                          : 'bg-white dark:bg-neutral-800 border border-slate-200 dark:border-neutral-700 text-slate-600 dark:text-neutral-300 hover:border-amber-500'
+                      }`}
+                    >
+                      {m} ເດືອນ
+                    </button>
+                  ))}
+                </div>
+
                 <input
                   type="range"
-                  min="5"
-                  max="150"
-                  step="5"
-                  value={simulatedDailyVolume}
-                  onChange={e => setSimulatedDailyVolume(parseInt(e.target.value) || 5)}
-                  className="w-full h-2 bg-neutral-200 dark:bg-neutral-800 rounded-lg cursor-pointer accent-amber-500"
+                  min="1"
+                  max="24"
+                  value={targetMonths}
+                  onChange={e => setTargetMonths(parseInt(e.target.value) || 1)}
+                  className="w-full h-2 bg-neutral-200 dark:bg-neutral-800 rounded-lg cursor-pointer accent-amber-500 mt-2"
                 />
-                <div className="flex justify-between text-[9px] text-slate-400 font-mono">
-                  <span>5 ກ້ອນ/ວັນ</span>
-                  <span>75 ກ້ອນ</span>
-                  <span>150 ກ້ອນ/ວັນ</span>
-                </div>
               </div>
 
-              {/* Input: ເງິນລົງທຶນເລີ່ມຕົ້ນ (CAPEX / ຄ່າສູດ 40 ລ້ານ) */}
+              {/* ເງິນລົງທຶນ (40 ລ້ານ) */}
               <div className="space-y-1">
                 <label className="label-xs flex justify-between">
-                  <span>ເງິນລົງທຶນເລີ່ມຕົ້ນ (CAPEX / ຄ່າຮຽນສູດ)</span>
-                  <span className="text-[9px] text-slate-400">ເງິນຕົ້ນທີ່ຕ້ອງຄືນທຶນ</span>
+                  <span>1. ເງິນລົງທຶນທີ່ຕ້ອງການຄືນທຶນ (CAPEX / ຄ່າຮຽນສູດ)</span>
+                  <span className="text-[10px] text-slate-400">ເງິນຕົ້ນ</span>
                 </label>
                 <div className="relative">
                   <input
                     type="text"
-                    value={initialInvestment ? initialInvestment.toLocaleString() : ''}
-                    onChange={e => setInitialInvestment(Number(e.target.value.replace(/,/g, '')) || 0)}
+                    value={investmentGoal ? investmentGoal.toLocaleString() : ''}
+                    onChange={e => setInvestmentGoal(Number(e.target.value.replace(/,/g, '')) || 0)}
                     className="crystal-input w-full font-mono font-bold text-sm pr-8"
                   />
                   <span className="absolute right-3 top-2.5 text-xs text-slate-400 font-mono">₭</span>
                 </div>
               </div>
 
-              {/* Input: ຄ່າໃຊ້ຈ່າຍຄົງທີ່ (Fixed OPEX) */}
+              {/* ຄ່າເຊົ່າ & ເງິນເດືອນ (12 ລ້ານ) */}
               <div className="space-y-1">
                 <label className="label-xs flex justify-between">
-                  <span>ຄ່າໃຊ້ຈ່າຍຄົງທີ່ຕໍ່ເດືອນ (Fixed Monthly OPEX)</span>
-                  <span className="text-[9px] text-slate-400">ຄ່າເຊົ່າ, ເງິນເດືອນ, ນ້ຳ-ໄຟ</span>
+                  <span>2. ຄ່າໃຊ້ຈ່າຍຄົງທີ່ຕໍ່ເດືອນ (Fixed Monthly OPEX)</span>
+                  <span className="text-[10px] text-slate-400">ຄ່າເຊົ່າ, ເງິນເດືອນ, ນ້ຳ-ໄຟ</span>
                 </label>
                 <div className="relative">
                   <input
                     type="text"
-                    value={fixedMonthlyOpex ? fixedMonthlyOpex.toLocaleString() : ''}
-                    onChange={e => setFixedMonthlyOpex(Number(e.target.value.replace(/,/g, '')) || 0)}
+                    value={monthlyOpex ? monthlyOpex.toLocaleString() : ''}
+                    onChange={e => setMonthlyOpex(Number(e.target.value.replace(/,/g, '')) || 0)}
                     className="crystal-input w-full font-mono font-bold text-sm pr-8"
                   />
                   <span className="absolute right-3 top-2.5 text-xs text-slate-400 font-mono">₭</span>
                 </div>
               </div>
 
-              {/* Price & Cost display */}
-              <div className="grid grid-cols-2 gap-3 pt-1">
-                <div className="p-3 rounded-2xl bg-slate-50 dark:bg-[#1a1a1a] text-xs">
-                  <span className="text-[9px] text-slate-400 block">ລາຄາຂາຍ:</span>
-                  <span className="font-mono font-bold text-slate-800 dark:text-white">{Number(activeBepData.unitPrice).toLocaleString()} ₭</span>
+              {/* ລາຄາຂາຍ & ຕົ້ນທຶນວັດຖຸດິບ */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="label-xs block mb-0.5">3. ລາຄາຂາຍ/ກ້ອນ</label>
+                  <input
+                    type="text"
+                    value={unitSellingPrice ? unitSellingPrice.toLocaleString() : ''}
+                    onChange={e => setUnitSellingPrice(Number(e.target.value.replace(/,/g, '')) || 0)}
+                    className="crystal-input w-full font-mono font-bold text-xs"
+                  />
                 </div>
-                <div className="p-3 rounded-2xl bg-slate-50 dark:bg-[#1a1a1a] text-xs">
-                  <span className="text-[9px] text-slate-400 block">ຕົ້ນທຶນຕົວຈິງ:</span>
-                  <span className="font-mono font-bold text-slate-800 dark:text-white">{Math.round(activeBepData.unitCost).toLocaleString()} ₭</span>
+                <div className="space-y-1">
+                  <label className="label-xs block mb-0.5">4. ຕົ້ນທຶນວັດຖຸດິບ/ກ້ອນ</label>
+                  <input
+                    type="text"
+                    value={unitVariableCost ? unitVariableCost.toLocaleString() : ''}
+                    onChange={e => setUnitVariableCost(Number(e.target.value.replace(/,/g, '')) || 0)}
+                    className="crystal-input w-full font-mono font-bold text-xs"
+                  />
                 </div>
               </div>
             </div>
 
-            {/* Right Chart & Analytical Breakdown (7 cols) */}
-            <div className="lg:col-span-7 high-density-card p-6 flex flex-col justify-between space-y-4">
+            {/* Right Summary Timeline & Analysis (6 cols) */}
+            <div className="lg:col-span-6 high-density-card p-6 flex flex-col justify-between space-y-5">
               <div>
                 <div className="flex justify-between items-center border-b border-slate-100 dark:border-neutral-800 pb-3">
-                  <div>
-                    <h3 className="text-sm font-serif text-slate-800 dark:text-white">
-                      ກຣາຟຈຸດຄຸ້ມທຶນ (Break-Even Crossover Chart)
-                    </h3>
-                    <p className="text-[10px] text-slate-400">
-                      ເສັ້ນລາຍຮັບສີຂຽວ ຕັດຂຶ້ນເໜືອເສັ້ນຕົ້ນທຶນລວມສີເທົາ = ຈຸດເລີ່ມຕົ້ນກຳໄລ
-                    </p>
-                  </div>
-                  <span className="text-xs font-mono font-bold text-amber-500 bg-amber-500/10 px-2.5 py-1 rounded-lg">
-                    BEP: {activeBepData.dailyBreakEvenUnits} ກ້ອນ/ວັນ
+                  <h3 className="text-sm font-serif text-slate-800 dark:text-white flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-emerald-500" />
+                    <span>ແຜນການຄືນທຶນລາຍເດືອນ (Payback Timeline)</span>
+                  </h3>
+                  <span className="text-xs font-mono text-emerald-500 font-bold bg-emerald-500/10 px-2.5 py-0.5 rounded-lg">
+                    {targetMonths} ເດືອນຄືນທຶນ 100%
                   </span>
                 </div>
 
-                <div className="h-[250px] w-full pt-3">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={activeBepData.simulationChart}>
-                      <defs>
-                        <linearGradient id="bepRev" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#10b981" stopOpacity={0.2}/>
-                          <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
-                        </linearGradient>
-                        <linearGradient id="bepCost" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#737373" stopOpacity={0.15}/>
-                          <stop offset="95%" stopColor="#737373" stopOpacity={0}/>
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#262626" opacity={0.15} />
-                      <XAxis dataKey="dailyVolume" fontSize={10} axisLine={false} tickLine={false} />
-                      <YAxis fontSize={10} axisLine={false} tickLine={false} tickFormatter={v => `${(v/1000000).toFixed(0)}M`} />
-                      <Tooltip 
-                        contentStyle={{ 
-                          backgroundColor: '#141414', 
-                          borderRadius: '12px', 
-                          border: '1px solid rgba(255,255,255,0.1)', 
-                          color: '#fff',
-                          fontSize: '11px' 
-                        }}
-                        formatter={(val: number) => [`${Math.round(val).toLocaleString()} ₭`, '']}
-                      />
-                      <Area type="monotone" dataKey="Revenue" stroke="#10b981" fill="url(#bepRev)" strokeWidth={2.5} name="ລາຍຮັບ" />
-                      <Area type="monotone" dataKey="TotalCost" stroke="#737373" fill="url(#bepCost)" strokeWidth={2} name="ຕົ້ນທຶນລວມ" />
-                    </AreaChart>
-                  </ResponsiveContainer>
+                {/* Timeline Progress Cards */}
+                <div className="space-y-2.5 pt-3 max-h-64 overflow-y-auto pr-1">
+                  {salesPlannerFormula.timeline.map((t, idx) => (
+                    <div key={idx} className="p-3 rounded-2xl bg-slate-50 dark:bg-[#1a1a1a] border border-slate-200/60 dark:border-neutral-800 space-y-1.5">
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="font-bold text-slate-800 dark:text-white font-mono">{t.month}:</span>
+                        <span className="font-mono font-bold text-emerald-500">
+                          ສະສົມໄດ້ {Math.round(t.accumulatedRecovered).toLocaleString()} ₭ ({t.percentDone.toFixed(0)}%)
+                        </span>
+                      </div>
+                      <div className="h-1.5 w-full bg-neutral-200 dark:bg-neutral-800 rounded-full overflow-hidden">
+                        <div className="h-full bg-emerald-500 transition-all duration-500" style={{ width: `${t.percentDone}%` }} />
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
 
-              {/* Analytical Summary Footer */}
-              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-[#1a1a1a] border border-slate-200/70 dark:border-neutral-800 space-y-2 text-xs">
-                <div className="flex items-center gap-1.5 text-slate-800 dark:text-neutral-200 font-bold">
-                  <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                  <span>ບົດສະຫຼຸບການຄືນທຶນສຳລັບສູດນີ້:</span>
-                </div>
-                <p className="text-slate-600 dark:text-neutral-400 text-[11px] leading-relaxed font-light">
-                  • ຖ້າຂາຍໄດ້ <b className="text-amber-500">{simulatedDailyVolume} ກ້ອນ/ວັນ</b>, ຮ້ານຈະມີກຳໄລສຸດທິປະມານ <b className="text-emerald-500">{Math.round(activeBepData.projectedNetProfit).toLocaleString()} ₭/ເດືອນ</b>.
-                  <br />
-                  • ຈະຄືນທຶນຄ່າສູດ {initialInvestment.toLocaleString()} ₭ ພາຍໃນ: <b className="text-sky-500">{activeBepData.paybackText}</b> (ຂາຍຄົບ <b className="text-sky-500">{activeBepData.totalUnitsToPaybackCapex.toLocaleString()} ກ້ອນ</b> ກໍຄືນທຶນຄ່າສູດໝົດທັນທີ!).
-                  <br />
-                  • ວັນໃດທີ່ຂາຍໄດ້ກາຍ <b className="text-emerald-500">{activeBepData.dailyBreakEvenUnits} ກ້ອນ</b> ຂຶ້ນໄປ, ທຸກໆກ້ອນທີ່ຂາຍຕື່ມຈະສ້າງກຳໄລເຂົ້າຮ້ານກ້ອນລະ <b className="text-emerald-500">+{Math.round(activeBepData.marginPerUnit).toLocaleString()} ₭</b> ເຕັມໆ!
+              {/* 💡 Plain-Language Actionable Advice */}
+              <div className="p-4 rounded-2xl bg-sky-500/10 border border-sky-500/20 text-xs space-y-1.5 leading-relaxed text-sky-900 dark:text-sky-200">
+                <span className="font-bold block flex items-center gap-1.5 text-sky-600 dark:text-sky-400">
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>ບົດສະຫຼຸບເປົ້າໝາຍການຂາຍ:</span>
+                </span>
+                <p>
+                  • ຖ້າທ່ານຕ້ອງການ **ຄືນທຶນ 40 ລ້ານພາຍໃນ {targetMonths} ເດືອນ**: ທ່ານຕ້ອງຕັ້ງເປົ້າຂາຍໃຫ້ໄດ້ຢ່າງໜ້ອຍ <b className="text-amber-500 font-mono text-sm">{salesPlannerFormula.targetDailyPieces} ກ້ອນ / ວັນ</b> (ຍອດຂາຍປະມານ <b className="font-mono">{Math.round(salesPlannerFormula.targetDailyRevenue).toLocaleString()} ₭/ວັນ</b>).
+                </p>
+                <p>
+                  • ໃນ {salesPlannerFormula.targetDailyPieces} ກ້ອນນັ້ນ: **29 ກ້ອນທຳອິດ** ຈະໄປກວມເອົາຄ່າເຊົ່າ ແລະ ເງິນເດືອນ, ສ່ວນ **14 ກ້ອນທີ່ເຫຼືອ** ຈະກາຍເປັນເງິນກຳໄລສຸດທິເດືອນລະ <b className="font-mono text-emerald-500">{Math.round(salesPlannerFormula.monthlyRecoveryQuota).toLocaleString()} ₭</b> ມາຕັດຄືນຄ່າສູດ 40 ລ້ານໃຫ້ຄົບຖ້ວນໃນເດືອນທີ {targetMonths}!
                 </p>
               </div>
             </div>
@@ -1039,7 +859,7 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
         </div>
       )}
 
-      {/* 📥 MODAL ດຶງໃບບິນ SUPPLIER */}
+      {/* Modal ດຶງໃບບິນ Supplier */}
       {isSupplierModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setIsSupplierModalOpen(false)}>
           <div className="bg-white dark:bg-[#141414] rounded-3xl p-6 border border-slate-200 dark:border-neutral-800 max-w-2xl w-full space-y-4 max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
@@ -1112,7 +932,7 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
         </div>
       )}
 
-      {/* ✏️ MODAL ປ່ຽນປະເພດຕົ້ນທຶນ (ປ່ຽນ 40 ລ້ານຈາກ OPEX ໄປເປັນ CAPEX) */}
+      {/* Modal ປ່ຽນປະເພດຕົ້ນທຶນ (40M OPEX -> CAPEX) */}
       {editingBucketTx && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm" onClick={() => setEditingBucketTx(null)}>
           <div className="bg-white dark:bg-[#141414] rounded-3xl p-6 border border-slate-200 dark:border-neutral-800 max-w-sm w-full space-y-4" onClick={e => e.stopPropagation()}>
@@ -1139,7 +959,7 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
         </div>
       )}
 
-      {/* Modal Preview Image */}
+      {/* Preview Image Modal */}
       {previewImage && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm" onClick={() => setPreviewImage(null)}>
           <div className="relative max-w-xl max-h-[85vh] bg-[#141414] rounded-3xl p-3 border border-neutral-800" onClick={e => e.stopPropagation()}>
