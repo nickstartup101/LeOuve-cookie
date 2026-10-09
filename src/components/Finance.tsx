@@ -1,20 +1,21 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   collection, addDoc, onSnapshot, 
-  deleteDoc, doc, serverTimestamp, getDocs, updateDoc 
+  deleteDoc, doc, serverTimestamp, updateDoc 
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { useTranslation } from 'react-i18next';
 import { 
   DollarSign, TrendingUp, Wallet, CreditCard, 
-  Plus, Trash2, ArrowUpRight, ArrowDownRight,
+  Plus, Trash2, Edit2, Calendar, Clock,
   Download, QrCode, Building2,
-  HandCoins, Receipt, Upload, Eye, Target, Sliders, Calculator, Sparkles, CheckCircle2, Clock
+  HandCoins, Receipt, Upload, Eye, Target, Sliders, Calculator, Sparkles, X, ZoomIn, CheckCircle2
 } from 'lucide-react';
 import { 
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip 
 } from 'recharts';
 import { format } from 'date-fns';
+import { utils, writeFile } from 'xlsx';
 
 const compressImage = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
@@ -56,26 +57,29 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
   const [transactions, setTransactions] = useState<any[]>([]);
   const [supplierPrices, setSupplierPrices] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
+  const [recipes, setRecipes] = useState<any[]>([]);
   const [debts, setDebts] = useState<any[]>([]);
+  const [posBills, setPosBills] = useState<any[]>([]);
 
   // Time Filter
   const [timeFilter, setTimeFilter] = useState<'all' | 'monthly'>('all');
   const [selectedMonth, setSelectedMonth] = useState<string>(format(new Date(), 'yyyy-MM'));
 
-  // Transactions Form
-  const [type, setType] = useState<'income' | 'expense'>('income');
+  // 📝 Form State: ບັນທຶກລາຍການໃໝ່ (ເລືອກວັນທີ & ເວລາໄດ້)
+  const [type, setType] = useState<'income' | 'expense'>('expense');
   const [amount, setAmount] = useState<string>('');
-  const [category, setCategory] = useState('ຂາຍເຄື່ອງດື່ມ & ກາເຟ (Coffee & Drinks)');
+  const [category, setCategory] = useState('ຊື້ເຄື່ອງເຂົ້າຮ້ານ (ຕົ້ນທຶນວັດຖຸດິບ COGS)');
   const [expenseBucket, setExpenseBucket] = useState<ExpenseBucket>('cogs');
   const [source, setSource] = useState<'cash' | 'onepay' | 'ldb'>('onepay');
   const [description, setDescription] = useState('');
   const [receiptImage, setReceiptImage] = useState('');
-  const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'));
-  const [time, setTime] = useState(format(new Date(), 'HH:mm'));
+  const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd')); // 🌟 ວັນທີ
+  const [time, setTime] = useState(format(new Date(), 'HH:mm'));       // 🌟 ເວລາ
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Edit Bucket (ປ່ຽນ 40 ລ້ານ ເປັນ CAPEX)
-  const [editingBucketTx, setEditingBucketTx] = useState<any | null>(null);
+  // ✏️ Edit Transaction State (ແກ້ໄຂທຸລະກຳທີ່ບັນທຶກໄປແລ້ວ)
+  const [editingTx, setEditingTx] = useState<any | null>(null);
+  const [editAmountDisplay, setEditAmountDisplay] = useState('');
 
   // Debts Form (AP/AR)
   const [debtType, setDebtType] = useState<'payable' | 'receivable'>('payable');
@@ -85,18 +89,23 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
   const [debtReceiptImage, setDebtReceiptImage] = useState('');
   const [debtRemark, setDebtRemark] = useState('');
 
-  // 🎯 SALES TARGET & PAYBACK FORMULA PLANNER STATE
-  const [targetMonths, setTargetMonths] = useState<number>(7);         // 🌟 ເປົ້າໝາຍຄືນທຶນ: 7 ເດືອນ
-  const [investmentGoal, setInvestmentGoal] = useState<number>(40000000); // ເງິນລົງທຶນ: 40 ລ້ານ
-  const [monthlyOpex, setMonthlyOpex] = useState<number>(12000000);       // ຄ່າເຊົ່າ-ເງິນເດືອນ: 12 ລ້ານ/ເດືອນ
-  const [unitSellingPrice, setUnitSellingPrice] = useState<number>(25000); // ລາຄາຂາຍ/ກ້ອນ: 25,000 ₭
-  const [unitVariableCost, setUnitVariableCost] = useState<number>(11000); // ຕົ້ນທຶນວັດຖຸດິບ/ກ້ອນ: 11,000 ₭
+  // 🎯 Break-Even Simulator
+  const [targetMonths, setTargetMonths] = useState<number>(7);
+  const [investmentGoal, setInvestmentGoal] = useState<number>(40000000);
+  const [monthlyOpex, setMonthlyOpex] = useState<number>(12000000);
+  const [unitSellingPrice, setUnitSellingPrice] = useState<number>(25000);
+  const [unitVariableCost, setUnitVariableCost] = useState<number>(11000);
 
+  // 📥 Drawer ດຶງໃບບິນ Supplier (ເລືອກຕາມວັນທີ, Default = ວັນປັດຈຸບັນ)
   const [isSupplierModalOpen, setIsSupplierModalOpen] = useState(false);
+  const [importFilterDate, setImportFilterDate] = useState<string>(format(new Date(), 'yyyy-MM-dd')); // 🌟 Default = Today
   const [selectedSupplierItems, setSelectedSupplierItems] = useState<{ [id: string]: boolean }>({});
-  const [previewImage, setPreviewImage] = useState<string | null>(null);
 
-  // Firestore Listeners with Client-Side Safe Sorting (ບໍ່ມີ Error Index)
+  // Image & POS Virtual Bill Viewers
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [viewingPosBill, setViewingPosBill] = useState<any | null>(null);
+
+  // 🔄 Realtime Subscriptions
   useEffect(() => {
     const unsubTx = onSnapshot(collection(db, 'transactions'), snap => {
       const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -118,8 +127,37 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
       setDebts(data);
     }, err => console.error("Debts load error:", err));
 
-    return () => { unsubTx(); unsubSp(); unsubPr(); unsubDebts(); };
+    const unsubBills = onSnapshot(collection(db, 'pos_bills'), snap => {
+      setPosBills(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, err => console.error("POS bills load error:", err));
+
+    return () => { unsubTx(); unsubSp(); unsubPr(); unsubDebts(); unsubBills(); };
   }, []);
+
+  // 📋 ຮອງຮັບ Paste ຮູບ (Ctrl+V) ທັງໃນຟອມບັນທຶກ ແລະ ແກ້ໄຂ
+  useEffect(() => {
+    const handlePaste = async (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.indexOf('image') !== -1) {
+          const file = items[i].getAsFile();
+          if (file) {
+            const base64 = await compressImage(file);
+            if (editingTx) {
+              setEditingTx((prev: any) => ({ ...prev, receiptImage: base64 }));
+            } else if (subView === 'transactions') {
+              setReceiptImage(base64);
+            } else if (subView === 'debts') {
+              setDebtReceiptImage(base64);
+            }
+          }
+        }
+      }
+    };
+    window.addEventListener('paste', handlePaste);
+    return () => window.removeEventListener('paste', handlePaste);
+  }, [editingTx, subView]);
 
   const filteredTransactions = useMemo(() => {
     if (timeFilter === 'monthly') {
@@ -154,59 +192,31 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
     return { totalPayable, totalReceivable };
   }, [debts]);
 
-  // 🎯 FORMULA CALCULATIONS: ສູດຄິດໄລ່ເປົ້າໝາຍຍອດຂາຍ & ໄລຍະເວລາຄືນທຶນ
+  // Break-even
   const salesPlannerFormula = useMemo(() => {
-    // 1. ກຳໄລສ່ວນເກີນຕໍ່ກ້ອນ (Contribution Margin)
     const marginPerUnit = Math.max(0, unitSellingPrice - unitVariableCost);
     const marginPercent = unitSellingPrice > 0 ? (marginPerUnit / unitSellingPrice) * 100 : 0;
-
-    // 2. ຈຸດຄຸ້ມທຶນລາຍວັນເພື່ອລອດ OPEX (Daily BEP for OPEX)
     const dailyBETOpex = marginPerUnit > 0 ? Math.ceil(monthlyOpex / (marginPerUnit * 30)) : 0;
-    const monthlyBETOpex = dailyBETOpex * 30;
-
-    // 3. ເປົ້າໝາຍກຳໄລທີ່ຕ້ອງເກັບຕໍ່ເດືອນເພື່ອຄືນທຶນພາຍໃນ T ເດືອນ
     const safeMonths = Math.max(1, targetMonths);
     const monthlyRecoveryQuota = investmentGoal / safeMonths;
-
-    // 4. ກຳໄລລວມທີ່ຕ້ອງເຮັດໃຫ້ໄດ້ຕໍ່ເດືອນ (OPEX + ເງິນຄືນທຶນ)
     const totalGrossProfitNeededMonthly = monthlyOpex + monthlyRecoveryQuota;
-
-    // 5. ຈຳນວນກ້ອນທີ່ຕ້ອງຂາຍຕໍ່ເດືອນ & ຕໍ່ວັນ ເພື່ອຄືນທຶນໃນ T ເດືອນ (🌟 ສູດຫຼັກ!)
     const targetMonthlyPieces = marginPerUnit > 0 ? Math.ceil(totalGrossProfitNeededMonthly / marginPerUnit) : 0;
     const targetDailyPieces = Math.ceil(targetMonthlyPieces / 30);
     const targetDailyRevenue = targetDailyPieces * unitSellingPrice;
-    const targetMonthlyRevenue = targetMonthlyPieces * unitSellingPrice;
-
-    // 6. ຈຳນວນກ້ອນທັງໝົດທີ່ຕ້ອງຂາຍຕະຫຼອດຊີວິດເພື່ອຄືນທຶນ 40 ລ້ານ
     const totalPiecesToRecoverAll = marginPerUnit > 0 ? Math.ceil(investmentGoal / marginPerUnit) : 0;
-
-    // 7. Month-by-Month Payback Timeline (1 ຫາ T ເດືອນ)
-    const timeline = Array.from({ length: Math.min(12, safeMonths) }, (_, i) => {
-      const monthNum = i + 1;
-      const accumulatedRecovered = Math.min(investmentGoal, monthNum * monthlyRecoveryQuota);
-      const percentDone = Math.min(100, (accumulatedRecovered / investmentGoal) * 100);
-      return {
-        month: `ເດືອນ ${monthNum}`,
-        accumulatedRecovered,
-        percentDone
-      };
-    });
 
     return {
       marginPerUnit,
       marginPercent,
       dailyBETOpex,
-      monthlyBETOpex,
       monthlyRecoveryQuota,
       targetDailyPieces,
-      targetMonthlyPieces,
       targetDailyRevenue,
-      targetMonthlyRevenue,
-      totalPiecesToRecoverAll,
-      timeline
+      totalPiecesToRecoverAll
     };
   }, [targetMonths, investmentGoal, monthlyOpex, unitSellingPrice, unitVariableCost]);
 
+  // 📝 ບັນທຶກລາຍການໃໝ່
   const handleAddTransaction = async (e: React.FormEvent) => {
     e.preventDefault();
     const rawAmt = Number(amount.replace(/,/g, ''));
@@ -222,8 +232,8 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
         source,
         description: description.trim(),
         receiptImage,
-        date,
-        time,
+        date, // 🌟 ວັນທີທີ່ເລືອກ
+        time, // 🌟 ເວລາທີ່ເລືອກ
         createdAt: serverTimestamp()
       });
       setAmount('');
@@ -234,27 +244,43 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
     }
   };
 
-  const handleAddDebt = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const rawAmt = Number(debtAmount.replace(/,/g, ''));
-    if (!rawAmt || !debtPerson.trim()) return;
-
-    await addDoc(collection(db, 'debts'), {
-      type: debtType,
-      person: debtPerson.trim(),
-      amount: rawAmt,
-      dueDate: debtDueDate,
-      receiptImage: debtReceiptImage,
-      remark: debtRemark.trim(),
-      status: 'pending',
-      createdAt: serverTimestamp()
+  // ✏️ ເປີດ Modal ແກ້ໄຂທຸລະກຳ
+  const handleOpenEditTx = (tx: any) => {
+    setEditingTx({
+      ...tx,
+      amountInput: tx.amount,
+      expenseBucket: tx.expenseBucket || (tx.type === 'income' ? null : 'opex'),
+      source: tx.source || 'onepay',
+      receiptImage: tx.receiptImage || ''
     });
-    setDebtPerson('');
-    setDebtAmount('');
-    setDebtReceiptImage('');
-    setDebtRemark('');
+    setEditAmountDisplay(Number(tx.amount).toLocaleString());
   };
 
+  // 💾 ບັນທຶກການແກ້ໄຂທຸລະກຳ
+  const handleSaveEditedTx = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingTx) return;
+
+    const rawAmt = Number(String(editingTx.amountInput).replace(/,/g, ''));
+    if (!rawAmt) return;
+
+    await updateDoc(doc(db, 'transactions', editingTx.id), {
+      type: editingTx.type,
+      amount: rawAmt,
+      category: editingTx.category,
+      expenseBucket: editingTx.type === 'expense' ? editingTx.expenseBucket : null,
+      source: editingTx.source,
+      description: (editingTx.description || '').trim(),
+      date: editingTx.date,
+      time: editingTx.time || '12:00',
+      receiptImage: editingTx.receiptImage || '',
+      updatedAt: serverTimestamp()
+    });
+
+    setEditingTx(null);
+  };
+
+  // 📥 ດຶງໃບບິນ SUPPLIER ຕາມວັນທີທີ່ເລືອກ
   const handleConfirmImportSupplierItems = async () => {
     const selectedIds = Object.keys(selectedSupplierItems).filter(id => selectedSupplierItems[id]);
     if (selectedIds.length === 0) return;
@@ -281,7 +307,7 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
         type: 'expense',
         amount: totalLAK,
         category: categoryName,
-        expenseBucket: bucket,
+        expenseBucket: bucket, // ✨ COGS vs CAPEX ອັດຕະໂນມັດ
         source: 'onepay',
         description: `ຊື້ ${prod?.name || 'ສິນຄ້າ'} ຈາກ ${sp.supplier} (${sp.quantity}ແພັກ)`,
         receiptImage: sp.receiptImage || '',
@@ -296,28 +322,28 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
     setIsSupplierModalOpen(false);
   };
 
-  const handleUpdateBucket = async (txId: string, newBucket: ExpenseBucket) => {
-    let newCategory = 'ຄ່າຮຽນສູດ & R&D ເມນູໃໝ່ (CAPEX)';
-    if (newBucket === 'cogs') newCategory = 'ຊື້ເຄື່ອງເຂົ້າຮ້ານ (ຕົ້ນທຶນວັດຖຸດິບ COGS)';
-    else if (newBucket === 'opex') newCategory = 'ຄ່າໃຊ້ຈ່າຍດຳເນີນງານ (OPEX)';
-    else if (newBucket === 'dividend') newCategory = 'ປັນຜົນຫຸ້ນສ່ວນ (Dividend)';
+  // 🔍 ກັ່ນຕອງໃບບິນ Supplier ຕາມວັນທີທີ່ເລືອກໃນ Modal (Default = Today)
+  const filteredSupplierPricesForImport = useMemo(() => {
+    if (importFilterDate === 'all') return supplierPrices;
+    return supplierPrices.filter(sp => sp.date === importFilterDate);
+  }, [supplierPrices, importFilterDate]);
 
-    await updateDoc(doc(db, 'transactions', txId), {
-      expenseBucket: newBucket,
-      category: newCategory
-    });
-    setEditingBucketTx(null);
+  // ກວດສອບວ່າທຸລະກຳນີ້ເປັນບິນ POS ຫຼືບໍ່
+  const handleCheckAndOpenPosBill = (tx: any) => {
+    // ຄົ້ນຫາບິນ POS ທີ່ກົງກັບເລກບິນ ຫຼື ວັນທີ
+    const matchedBill = posBills.find(b => 
+      (tx.description && tx.description.includes(b.billNo)) || 
+      (b.date === tx.date && Number(b.totalRevenue) === Number(tx.amount))
+    );
+
+    if (matchedBill) {
+      setViewingPosBill(matchedBill);
+    } else if (tx.receiptImage) {
+      setPreviewImage(tx.receiptImage);
+    } else {
+      alert("ລາຍການນີ້ບໍ່ມີຮູບໃບບິນ ຫຼື ບໍ່ພົບຂໍ້ມູນບິນ POS ຕົ້ນສະບັບ");
+    }
   };
-
-  const groupedSupplierPricesByDate = useMemo(() => {
-    const groups: { [dateStr: string]: any[] } = {};
-    supplierPrices.forEach(sp => {
-      const d = sp.date || 'No Date';
-      if (!groups[d]) groups[d] = [];
-      groups[d].push(sp);
-    });
-    return groups;
-  }, [supplierPrices]);
 
   return (
     <div className="space-y-6 font-sans pb-16">
@@ -355,7 +381,7 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
         </div>
       </div>
 
-      {/* 3 Sub-tabs */}
+      {/* Sub Tabs */}
       <div className="flex flex-wrap gap-2">
         <button
           onClick={() => setSubView('transactions')}
@@ -375,13 +401,14 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
           className={`px-4 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${subView === 'breakeven' ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950' : 'bg-white dark:bg-[#141414] border border-slate-200 dark:border-neutral-800 text-slate-400'}`}
         >
           <Target className="w-3.5 h-3.5 text-amber-500" />
-          <span>🎯 ສູດຄຳນວນເປົ້າໝາຍຍອດຂາຍ & ຄືນທຶນ (Payback Planner)</span>
+          <span>ສູດຄຳນວນເປົ້າໝາຍຍອດຂາຍ & ຄືນທຶນ</span>
         </button>
       </div>
 
       {/* VIEW 1: TRANSACTIONS */}
       {subView === 'transactions' && (
         <>
+          {/* Summary Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
             <div className="high-density-card p-5 space-y-1">
               <span className="label-xs flex justify-between"><span>ລາຍຮັບລວມ</span><span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span></span>
@@ -406,9 +433,12 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            
+            {/* 📝 Form ບັນທຶກລາຍການໃໝ່ (ມີຊ່ອງເລືອກວັນທີ & ເວລາ) */}
             <div className="lg:col-span-4">
               <div className="high-density-card p-6 space-y-4 sticky top-20">
                 <h3 className="text-sm font-serif text-slate-800 dark:text-white border-b border-slate-100 dark:border-neutral-800 pb-3">ບັນທຶກລາຍການໃໝ່</h3>
+                
                 <form onSubmit={handleAddTransaction} className="space-y-4">
                   <div className="grid grid-cols-2 gap-2 bg-slate-100 dark:bg-neutral-900 p-1 rounded-2xl">
                     <button type="button" onClick={() => setType('income')} className={`py-2 text-xs font-bold rounded-xl cursor-pointer ${type === 'income' ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950' : 'text-slate-400'}`}>+ ລາຍຮັບ</button>
@@ -430,7 +460,7 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
                           { id: 'capex', name: 'CAPEX ອຸປະກອນ/ສູດ' },
                           { id: 'dividend', name: 'ປັນຜົນ' }
                         ].map(b => (
-                          <button key={b.id} type="button" onClick={() => setExpenseBucket(b.id as any)} className={`p-2 rounded-xl text-xs font-bold border text-left ${expenseBucket === b.id ? 'border-[#052659] dark:border-white bg-[#052659]/5 dark:bg-white/5 font-black' : 'border-slate-200 dark:border-neutral-800 text-slate-400'}`}>
+                          <button key={b.id} type="button" onClick={() => setExpenseBucket(b.id as any)} className={`p-2 rounded-xl text-xs font-bold border text-left cursor-pointer ${expenseBucket === b.id ? 'border-[#052659] dark:border-white bg-[#052659]/5 dark:bg-white/5 font-black' : 'border-slate-200 dark:border-neutral-800 text-slate-400'}`}>
                             {b.name}
                           </button>
                         ))}
@@ -442,34 +472,72 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
                     <label className="label-xs block mb-1">ຊ່ອງທາງຊຳລະ</label>
                     <div className="grid grid-cols-3 gap-1.5">
                       {['cash', 'onepay', 'ldb'].map(s => (
-                        <button key={s} type="button" onClick={() => setSource(s as any)} className={`py-2 text-xs font-bold rounded-xl border uppercase ${source === s ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950 border-transparent' : 'border-slate-200 dark:border-neutral-800 text-slate-500'}`}>
+                        <button key={s} type="button" onClick={() => setSource(s as any)} className={`py-2 text-xs font-bold rounded-xl border uppercase cursor-pointer ${source === s ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950 border-transparent' : 'border-slate-200 dark:border-neutral-800 text-slate-500'}`}>
                           {s}
                         </button>
                       ))}
                     </div>
                   </div>
 
+                  {/* 🌟 ຊ່ອງເລືອກວັນທີ & ເວລາ (ເລືອກວັນທີຍ້ອນຫຼັງໄດ້) */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="label-xs block mb-1">ວັນທີ</label>
+                      <input 
+                        type="date" 
+                        required 
+                        value={date} 
+                        onChange={e => setDate(e.target.value)} 
+                        className="crystal-input w-full !text-xs font-mono font-bold" 
+                      />
+                    </div>
+                    <div>
+                      <label className="label-xs block mb-1">ເວລາ</label>
+                      <input 
+                        type="time" 
+                        required 
+                        value={time} 
+                        onChange={e => setTime(e.target.value)} 
+                        className="crystal-input w-full !text-xs font-mono font-bold" 
+                      />
+                    </div>
+                  </div>
+
+                  {/* 📸 ຊ່ອງອັບໂຫຼດຮູບໃບບິນ (Drag/Drop & Ctrl+V) */}
                   <div>
-                    <label className="label-xs flex justify-between mb-1"><span>ຮູບໃບບິນ (Ctrl+V)</span></label>
-                    <div className="border border-dashed border-slate-200 dark:border-neutral-700 rounded-xl p-2.5 relative flex items-center justify-between hover:bg-slate-50 dark:hover:bg-neutral-800/40">
+                    <label className="label-xs flex justify-between mb-1">
+                      <span>ຮູບໃບບິນ (Receipt Attachment)</span>
+                      <span className="text-emerald-500 font-bold text-[9px]">Ctrl+V ວາງໄດ້</span>
+                    </label>
+                    <div 
+                      onDragOver={e => e.preventDefault()}
+                      onDrop={async (e) => {
+                        e.preventDefault();
+                        const files = e.dataTransfer.files;
+                        if (files.length > 0 && files[0].type.startsWith('image/')) {
+                          setReceiptImage(await compressImage(files[0]));
+                        }
+                      }}
+                      className="border border-dashed border-slate-200 dark:border-neutral-700 rounded-xl p-2.5 relative flex items-center justify-between hover:bg-slate-50 dark:hover:bg-neutral-800/40 transition-colors cursor-pointer"
+                    >
                       <input type="file" accept="image/*" onChange={async (e) => {
                         const file = e.target.files?.[0];
                         if (file) setReceiptImage(await compressImage(file));
                       }} className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" />
                       {receiptImage ? (
                         <div className="flex items-center gap-2 w-full justify-between">
-                          <img src={receiptImage} alt="Receipt" className="w-8 h-8 rounded-lg object-cover border border-neutral-700" />
-                          <span className="text-[10px] text-emerald-500 font-bold">ອັບໂຫຼດຮູບແລ້ວ ✓</span>
+                          <img src={receiptImage} alt="Receipt" className="w-9 h-9 rounded-lg object-cover border border-neutral-700" />
+                          <span className="text-xs text-emerald-500 font-bold">ອັບໂຫຼດຮູບແລ້ວ ✓</span>
                           <button type="button" onClick={(e) => { e.stopPropagation(); setReceiptImage(''); }} className="text-rose-500 p-1">✕</button>
                         </div>
                       ) : (
-                        <span className="text-xs text-slate-400 mx-auto flex items-center gap-1.5"><Upload className="w-3.5 h-3.5" /> ຄລິກ ຫຼື ວາງຮູບ (Ctrl+V)</span>
+                        <span className="text-xs text-slate-400 mx-auto flex items-center gap-1.5"><Upload className="w-3.5 h-3.5" /> ຄລິກ, ລາກວາງ ຫຼື ກົດ Ctrl+V</span>
                       )}
                     </div>
                   </div>
 
                   <div>
-                    <label className="label-xs block mb-1">ລາຍລະອຽດ</label>
+                    <label className="label-xs block mb-1">ລາຍລະອຽດ / ໝາຍເຫດ</label>
                     <input type="text" placeholder="ລາຍລະອຽດ..." value={description} onChange={e => setDescription(e.target.value)} className="crystal-input w-full !text-xs" />
                   </div>
 
@@ -480,11 +548,12 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
               </div>
             </div>
 
+            {/* Table with Edit Button & POS Bill Viewer */}
             <div className="lg:col-span-8">
               <div className="high-density-card p-5 overflow-hidden">
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="text-sm font-serif text-slate-800 dark:text-white">ປະຫວັດທຸລະກຳ</h3>
-                  <span className="text-[10px] text-slate-400">ຄລິກປ້າຍກຸ່ມຕົ້ນທຶນເພື່ອປ່ຽນ OPEX ➔ CAPEX ໄດ້</span>
+                  <span className="text-[10px] text-slate-400">ກົດໄອຄອນສໍເພື່ອແກ້ໄຂ • ກົດໄອຄອນຕາເພື່ອເບິ່ງຮູບ/ບິນ POS</span>
                 </div>
 
                 <div className="overflow-x-auto">
@@ -500,43 +569,69 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-neutral-800">
-                      {filteredTransactions.map(t => (
-                        <tr key={t.id} className="hover:bg-slate-50/50 dark:hover:bg-neutral-800/30">
-                          <td className="p-3 font-mono text-slate-400 whitespace-nowrap">{t.date}</td>
-                          <td className="p-3">
-                            <span className="font-bold text-slate-800 dark:text-white block">{t.description || t.category}</span>
-                            <span className="text-[10px] text-slate-400 font-mono uppercase">{t.source}</span>
-                          </td>
-                          <td className="p-3 whitespace-nowrap">
-                            <span 
-                              onClick={() => setEditingBucketTx(t)}
-                              className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase cursor-pointer hover:scale-105 transition-transform inline-flex items-center gap-1 ${
-                                t.expenseBucket === 'capex' ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' :
-                                t.expenseBucket === 'cogs' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' :
-                                t.expenseBucket === 'dividend' ? 'bg-pink-500/10 text-pink-400 border border-pink-500/20' :
-                                'bg-blue-500/10 text-blue-400 border border-blue-500/20'
-                              }`}
-                            >
-                              {t.expenseBucket ? t.expenseBucket.toUpperCase() : (t.type === 'income' ? 'INCOME' : 'OPEX')} ✏️
-                            </span>
-                          </td>
-                          <td className={`p-3 text-right font-mono font-bold whitespace-nowrap ${t.type === 'income' ? 'text-emerald-500' : 'text-rose-500'}`}>
-                            {t.type === 'income' ? '+' : '-'}{Number(t.amount).toLocaleString()} ₭
-                          </td>
-                          <td className="p-3 text-center">
-                            {t.receiptImage ? (
-                              <button onClick={() => setPreviewImage(t.receiptImage)} className="p-1 rounded bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 cursor-pointer">
-                                <Eye className="w-3.5 h-3.5" />
-                              </button>
-                            ) : <span className="text-slate-500">-</span>}
-                          </td>
-                          <td className="p-3 text-center">
-                            <button onClick={() => deleteDoc(doc(db, 'transactions', t.id))} className="text-slate-400 hover:text-rose-500 cursor-pointer">
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
+                      {filteredTransactions.map(t => {
+                        const isPosBill = t.description && t.description.includes('POS');
+
+                        return (
+                          <tr key={t.id} className="hover:bg-slate-50/50 dark:hover:bg-neutral-800/30">
+                            <td className="p-3 font-mono text-slate-400 whitespace-nowrap">{t.date}</td>
+                            <td className="p-3">
+                              <span className="font-bold text-slate-800 dark:text-white block">{t.description || t.category}</span>
+                              <span className="text-[10px] text-slate-400 font-mono uppercase">{t.source}</span>
+                            </td>
+                            <td className="p-3 whitespace-nowrap">
+                              <span 
+                                onClick={() => handleOpenEditTx(t)}
+                                className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase cursor-pointer hover:scale-105 transition-transform inline-flex items-center gap-1 ${
+                                  t.expenseBucket === 'capex' ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' :
+                                  t.expenseBucket === 'cogs' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' :
+                                  t.expenseBucket === 'dividend' ? 'bg-pink-500/10 text-pink-400 border border-pink-500/20' :
+                                  'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                                }`}
+                                title="ຄລິກເພື່ອປ່ຽນປະເພດ (OPEX ➔ CAPEX)"
+                              >
+                                {t.expenseBucket ? t.expenseBucket.toUpperCase() : (t.type === 'income' ? 'INCOME' : 'OPEX')} ✏️
+                              </span>
+                            </td>
+                            <td className={`p-3 text-right font-mono font-bold whitespace-nowrap ${t.type === 'income' ? 'text-emerald-500' : 'text-rose-500'}`}>
+                              {t.type === 'income' ? '+' : '-'}{Number(t.amount).toLocaleString()} ₭
+                            </td>
+                            
+                            {/* 🌟 ຊ່ອງໃບບິນ: ກົດເບິ່ງຮູບໃບບິນ ຫຼື ບິນ POS ໄດ້ທັນທີ! */}
+                            <td className="p-3 text-center">
+                              {t.receiptImage || isPosBill ? (
+                                <button 
+                                  onClick={() => handleCheckAndOpenPosBill(t)} 
+                                  className="p-1.5 rounded-lg bg-sky-500/10 text-sky-500 hover:bg-sky-500/20 cursor-pointer"
+                                  title={isPosBill ? "ກົດເບິ່ງບິນ POS ຕົວຈິງ" : "ກົດເບິ່ງຮູບໃບບິນ"}
+                                >
+                                  <Eye className="w-3.5 h-3.5" />
+                                </button>
+                              ) : <span className="text-slate-500">-</span>}
+                            </td>
+
+                            {/* 🛠️ ປຸ່ມແກ້ໄຂ (Edit2) ແລະ ປຸ່ມລຶບ (Trash2) */}
+                            <td className="p-3 text-center">
+                              <div className="flex items-center justify-center gap-1.5">
+                                <button 
+                                  onClick={() => handleOpenEditTx(t)} 
+                                  className="p-1 text-slate-400 hover:text-sky-500 rounded-lg cursor-pointer"
+                                  title="ແກ້ໄຂທຸລະກຳ"
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </button>
+                                <button 
+                                  onClick={() => deleteDoc(doc(db, 'transactions', t.id))} 
+                                  className="p-1 text-slate-400 hover:text-rose-500 cursor-pointer"
+                                  title="ລຶບ"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -564,7 +659,26 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
             <div className="lg:col-span-4">
               <div className="high-density-card p-6 space-y-4">
                 <h3 className="text-sm font-serif text-slate-800 dark:text-white">ບັນທຶກໜີ້ສິນ (AP/AR)</h3>
-                <form onSubmit={handleAddDebt} className="space-y-3">
+                <form onSubmit={async (e) => {
+                  e.preventDefault();
+                  const rawAmt = Number(debtAmount.replace(/,/g, ''));
+                  if (!rawAmt || !debtPerson.trim()) return;
+                  await addDoc(collection(db, 'debts'), {
+                    type: debtType,
+                    person: debtPerson.trim(),
+                    amount: rawAmt,
+                    dueDate: debtDueDate,
+                    receiptImage: debtReceiptImage,
+                    remark: debtRemark.trim(),
+                    status: 'pending',
+                    createdAt: serverTimestamp()
+                  });
+                  setDebtPerson('');
+                  setDebtAmount('');
+                  setDebtReceiptImage('');
+                  setDebtRemark('');
+                  alert("ບັນທຶກໜີ້ສິນສຳເລັດ!");
+                }} className="space-y-3">
                   <div className="grid grid-cols-2 gap-1.5 bg-slate-100 dark:bg-neutral-900 p-1 rounded-2xl">
                     <button type="button" onClick={() => setDebtType('payable')} className={`py-2 text-xs font-bold rounded-xl ${debtType === 'payable' ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950' : 'text-slate-400'}`}>ໜີ້ຕ້ອງສົ່ງ (AP)</button>
                     <button type="button" onClick={() => setDebtType('receivable')} className={`py-2 text-xs font-bold rounded-xl ${debtType === 'receivable' ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950' : 'text-slate-400'}`}>ໜີ້ຕ້ອງຮັບ (AR)</button>
@@ -585,6 +699,26 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
                     <input type="date" required value={debtDueDate} onChange={e => setDebtDueDate(e.target.value)} className="crystal-input w-full !text-xs font-mono" />
                   </div>
 
+                  {/* 📸 Debt Receipt Upload */}
+                  <div>
+                    <label className="label-xs flex justify-between mb-1"><span>ຮູບຫຼັກຖານໜີ້ສິນ (Ctrl+V)</span></label>
+                    <div className="border border-dashed border-slate-200 dark:border-neutral-700 rounded-xl p-2 relative flex items-center justify-between">
+                      <input type="file" accept="image/*" onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (file) setDebtReceiptImage(await compressImage(file));
+                      }} className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" />
+                      {debtReceiptImage ? (
+                        <div className="flex items-center gap-2 w-full justify-between">
+                          <img src={debtReceiptImage} alt="Receipt" className="w-8 h-8 rounded-lg object-cover" />
+                          <span className="text-[10px] text-emerald-500 font-bold">ອັບໂຫຼດຮູບແລ້ວ ✓</span>
+                          <button type="button" onClick={(e) => { e.stopPropagation(); setDebtReceiptImage(''); }} className="text-rose-500 p-1">✕</button>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-slate-400 mx-auto flex items-center gap-1.5"><Upload className="w-3.5 h-3.5" /> ວາງຮູບຫຼັກຖານ</span>
+                      )}
+                    </div>
+                  </div>
+
                   <button type="submit" className="crystal-button w-full h-11">ບັນທຶກໜີ້ສິນ</button>
                 </form>
               </div>
@@ -601,6 +735,7 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
                         <th className="p-3">ຊື່ຄູ່ຄ້າ</th>
                         <th className="p-3">ກຳນົດຊຳລະ</th>
                         <th className="p-3 text-right">ຈຳນວນເງິນ</th>
+                        <th className="p-3 text-center">ໃບບິນ</th>
                         <th className="p-3 text-center">ສະຖານະ</th>
                         <th className="p-3 text-center">ລຶບ</th>
                       </tr>
@@ -619,7 +754,17 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
                             <td className="p-3 font-mono text-slate-400">{d.dueDate || '-'}</td>
                             <td className="p-3 text-right font-mono font-bold">{Number(d.amount || 0).toLocaleString()} ₭</td>
                             <td className="p-3 text-center">
-                              <button onClick={() => updateDoc(doc(db, 'debts', d.id), { status: d.status === 'settled' ? 'pending' : 'settled' })} className={`px-2.5 py-1 rounded-xl text-[9px] font-bold ${d.status === 'settled' ? 'bg-emerald-500 text-white' : 'bg-amber-500/10 text-amber-500'}`}>
+                              {d.receiptImage ? (
+                                <button onClick={() => setPreviewImage(d.receiptImage)} className="p-1 rounded bg-emerald-500/10 text-emerald-500">
+                                  <Eye className="w-3.5 h-3.5" />
+                                </button>
+                              ) : '-'}
+                            </td>
+                            <td className="p-3 text-center">
+                              <button
+                                onClick={() => updateDoc(doc(db, 'debts', d.id), { status: d.status === 'settled' ? 'pending' : 'settled' })}
+                                className={`px-2.5 py-1 rounded-xl text-[9px] font-bold cursor-pointer ${d.status === 'settled' ? 'bg-emerald-500 text-white' : 'bg-amber-500/10 text-amber-500'}`}
+                              >
                                 {d.status === 'settled' ? 'ຊຳລະແລ້ວ ✓' : 'ຄ້າງຊຳລະ'}
                               </button>
                             </td>
@@ -638,14 +783,10 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
         </div>
       )}
 
-      {/* 🎯 VIEW 3: SALES TARGET & PAYBACK FORMULA PLANNER (ສູດຄິດໄລ່ເປົ້າໝາຍຍອດຂາຍຕົວຈິງ) */}
+      {/* VIEW 3: BREAK-EVEN SIMULATOR */}
       {subView === 'breakeven' && (
         <div className="space-y-6">
-          
-          {/* 🌟 4 ANSWER CARDS: ສະຫຼຸບຄຳຕອບເປົ້າໝາຍຍອດຂາຍ */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            
-            {/* Card 1: ຕ້ອງຂາຍມື້ລະຈັກກ້ອນເພື່ອຄືນທຶນໃນ T ເດືອນ (ຄຳຕອບຫຼັກ!) */}
             <div className="high-density-card p-6 space-y-1 bg-amber-500/5 dark:bg-amber-500/10 border-amber-500/30">
               <span className="label-xs !text-amber-600 dark:text-amber-400 flex justify-between">
                 <span>ເປົ້າໝາຍຂາຍຕໍ່ວັນ (ຄືນທຶນໃນ {targetMonths} ເດືອນ)</span>
@@ -655,11 +796,10 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
                 {salesPlannerFormula.targetDailyPieces.toLocaleString()} <span className="text-xs font-sans font-normal opacity-80">ກ້ອນ / ວັນ</span>
               </h2>
               <span className="text-[11px] text-slate-500 dark:text-neutral-400 block font-light pt-1">
-                ຍອດຂາຍທີ່ຕ້ອງໄດ້: <b className="text-slate-800 dark:text-white font-mono">{Math.round(salesPlannerFormula.targetDailyRevenue).toLocaleString()} ₭ / ວັນ</b>
+                ຍອດຂາຍ: <b className="text-slate-800 dark:text-white font-mono">{Math.round(salesPlannerFormula.targetDailyRevenue).toLocaleString()} ₭/ວັນ</b>
               </span>
             </div>
 
-            {/* Card 2: ຂາຍຂັ້ນຕ່ຳຕໍ່ວັນເພື່ອລອດ OPEX (ຄ່າເຊົ່າ & ເງິນເດືອນ) */}
             <div className="high-density-card p-6 space-y-1">
               <span className="label-xs flex justify-between">
                 <span>ຂາຍຂັ້ນຕ່ຳເພື່ອລອດ (BEP OPEX)</span>
@@ -673,21 +813,16 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
               </span>
             </div>
 
-            {/* Card 3: ຈຳນວນກ້ອນທັງໝົດທີ່ຕ້ອງຂາຍເພື່ອຄືນ 40 ລ້ານ */}
             <div className="high-density-card p-6 space-y-1">
               <span className="label-xs flex justify-between">
-                <span>ຈຳນວນກ້ອນທັງໝົດເພື່ອຄືນທຶນ</span>
+                <span>ຈຳນວນກ້ອນທັງໝົດເພື່ອຄືນ 40 ລ້ານ</span>
                 <Sparkles className="w-4 h-4 text-emerald-500" />
               </span>
               <h2 className="text-3xl font-serif font-bold text-emerald-500 mt-2 font-mono">
                 {salesPlannerFormula.totalPiecesToRecoverAll.toLocaleString()} <span className="text-xs font-sans font-normal opacity-70">ກ້ອນ</span>
               </h2>
-              <span className="text-[11px] text-slate-400 block font-light pt-1">
-                ກຳໄລສ່ວນເກີນ: <b className="text-emerald-500 font-mono">+{salesPlannerFormula.marginPerUnit.toLocaleString()} ₭ / ກ້ອນ</b> ({salesPlannerFormula.marginPercent.toFixed(0)}%)
-              </span>
             </div>
 
-            {/* Card 4: ກຳໄລສຸດທິທີ່ຕ້ອງເກັບຕໍ່ເດືອນ */}
             <div className="high-density-card p-6 space-y-1">
               <span className="label-xs flex justify-between">
                 <span>ເງິນຄືນທຶນທີ່ຕ້ອງຕັດ/ເດືອນ</span>
@@ -696,231 +831,98 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
               <h2 className="text-3xl font-serif font-bold text-purple-500 mt-2 font-mono">
                 {Math.round(salesPlannerFormula.monthlyRecoveryQuota).toLocaleString()} <span className="text-xs font-sans font-normal opacity-70">₭</span>
               </h2>
-              <span className="text-[11px] text-slate-400 block font-light pt-1">
-                {investmentGoal.toLocaleString()} ₭ ÷ {targetMonths} ເດືອນ
-              </span>
             </div>
-
           </div>
-
-          {/* 🎛️ CONTROLS & FORMULA PARAMETERS */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            
-            {/* Left Control Panel (6 cols) */}
-            <div className="lg:col-span-6 high-density-card p-6 space-y-5">
-              <div className="flex justify-between items-center border-b border-slate-100 dark:border-neutral-800 pb-3">
-                <h3 className="text-sm font-serif text-slate-800 dark:text-white flex items-center gap-2">
-                  <Sliders className="w-4 h-4 text-amber-500" />
-                  <span>ປັບຕົວເລກເປົ້າໝາຍ & ເວລາຄືນທຶນ</span>
-                </h3>
-              </div>
-
-              {/* 🌟 ປຸ່ມກົດເລືອກເປົ້າໝາຍດ່ວນ: 3 ເດືອນ, 6 ເດືອນ, 7 ເດືອນ, 12 ເດືອນ */}
-              <div className="space-y-2 p-4 rounded-2xl bg-slate-50 dark:bg-[#1a1a1a] border border-slate-200/60 dark:border-neutral-800">
-                <div className="flex justify-between items-center text-xs">
-                  <span className="font-bold text-slate-700 dark:text-neutral-200">ເປົ້າໝາຍຢາກຄືນທຶນພາຍໃນ:</span>
-                  <span className="font-mono font-black text-amber-500 bg-amber-500/10 px-3 py-1 rounded-xl text-sm border border-amber-500/20">
-                    {targetMonths} ເດືອນ
-                  </span>
-                </div>
-
-                <div className="flex flex-wrap gap-1.5 pt-1">
-                  {[3, 6, 7, 9, 12, 18, 24].map(m => (
-                    <button
-                      key={m}
-                      type="button"
-                      onClick={() => setTargetMonths(m)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold transition-all cursor-pointer ${
-                        targetMonths === m 
-                          ? 'bg-amber-500 text-white shadow-sm' 
-                          : 'bg-white dark:bg-neutral-800 border border-slate-200 dark:border-neutral-700 text-slate-600 dark:text-neutral-300 hover:border-amber-500'
-                      }`}
-                    >
-                      {m} ເດືອນ
-                    </button>
-                  ))}
-                </div>
-
-                <input
-                  type="range"
-                  min="1"
-                  max="24"
-                  value={targetMonths}
-                  onChange={e => setTargetMonths(parseInt(e.target.value) || 1)}
-                  className="w-full h-2 bg-neutral-200 dark:bg-neutral-800 rounded-lg cursor-pointer accent-amber-500 mt-2"
-                />
-              </div>
-
-              {/* ເງິນລົງທຶນ (40 ລ້ານ) */}
-              <div className="space-y-1">
-                <label className="label-xs flex justify-between">
-                  <span>1. ເງິນລົງທຶນທີ່ຕ້ອງການຄືນທຶນ (CAPEX / ຄ່າຮຽນສູດ)</span>
-                  <span className="text-[10px] text-slate-400">ເງິນຕົ້ນ</span>
-                </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={investmentGoal ? investmentGoal.toLocaleString() : ''}
-                    onChange={e => setInvestmentGoal(Number(e.target.value.replace(/,/g, '')) || 0)}
-                    className="crystal-input w-full font-mono font-bold text-sm pr-8"
-                  />
-                  <span className="absolute right-3 top-2.5 text-xs text-slate-400 font-mono">₭</span>
-                </div>
-              </div>
-
-              {/* ຄ່າເຊົ່າ & ເງິນເດືອນ (12 ລ້ານ) */}
-              <div className="space-y-1">
-                <label className="label-xs flex justify-between">
-                  <span>2. ຄ່າໃຊ້ຈ່າຍຄົງທີ່ຕໍ່ເດືອນ (Fixed Monthly OPEX)</span>
-                  <span className="text-[10px] text-slate-400">ຄ່າເຊົ່າ, ເງິນເດືອນ, ນ້ຳ-ໄຟ</span>
-                </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={monthlyOpex ? monthlyOpex.toLocaleString() : ''}
-                    onChange={e => setMonthlyOpex(Number(e.target.value.replace(/,/g, '')) || 0)}
-                    className="crystal-input w-full font-mono font-bold text-sm pr-8"
-                  />
-                  <span className="absolute right-3 top-2.5 text-xs text-slate-400 font-mono">₭</span>
-                </div>
-              </div>
-
-              {/* ລາຄາຂາຍ & ຕົ້ນທຶນວັດຖຸດິບ */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="label-xs block mb-0.5">3. ລາຄາຂາຍ/ກ້ອນ</label>
-                  <input
-                    type="text"
-                    value={unitSellingPrice ? unitSellingPrice.toLocaleString() : ''}
-                    onChange={e => setUnitSellingPrice(Number(e.target.value.replace(/,/g, '')) || 0)}
-                    className="crystal-input w-full font-mono font-bold text-xs"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="label-xs block mb-0.5">4. ຕົ້ນທຶນວັດຖຸດິບ/ກ້ອນ</label>
-                  <input
-                    type="text"
-                    value={unitVariableCost ? unitVariableCost.toLocaleString() : ''}
-                    onChange={e => setUnitVariableCost(Number(e.target.value.replace(/,/g, '')) || 0)}
-                    className="crystal-input w-full font-mono font-bold text-xs"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Right Summary Timeline & Analysis (6 cols) */}
-            <div className="lg:col-span-6 high-density-card p-6 flex flex-col justify-between space-y-5">
-              <div>
-                <div className="flex justify-between items-center border-b border-slate-100 dark:border-neutral-800 pb-3">
-                  <h3 className="text-sm font-serif text-slate-800 dark:text-white flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-emerald-500" />
-                    <span>ແຜນການຄືນທຶນລາຍເດືອນ (Payback Timeline)</span>
-                  </h3>
-                  <span className="text-xs font-mono text-emerald-500 font-bold bg-emerald-500/10 px-2.5 py-0.5 rounded-lg">
-                    {targetMonths} ເດືອນຄືນທຶນ 100%
-                  </span>
-                </div>
-
-                {/* Timeline Progress Cards */}
-                <div className="space-y-2.5 pt-3 max-h-64 overflow-y-auto pr-1">
-                  {salesPlannerFormula.timeline.map((t, idx) => (
-                    <div key={idx} className="p-3 rounded-2xl bg-slate-50 dark:bg-[#1a1a1a] border border-slate-200/60 dark:border-neutral-800 space-y-1.5">
-                      <div className="flex justify-between items-center text-xs">
-                        <span className="font-bold text-slate-800 dark:text-white font-mono">{t.month}:</span>
-                        <span className="font-mono font-bold text-emerald-500">
-                          ສະສົມໄດ້ {Math.round(t.accumulatedRecovered).toLocaleString()} ₭ ({t.percentDone.toFixed(0)}%)
-                        </span>
-                      </div>
-                      <div className="h-1.5 w-full bg-neutral-200 dark:bg-neutral-800 rounded-full overflow-hidden">
-                        <div className="h-full bg-emerald-500 transition-all duration-500" style={{ width: `${t.percentDone}%` }} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* 💡 Plain-Language Actionable Advice */}
-              <div className="p-4 rounded-2xl bg-sky-500/10 border border-sky-500/20 text-xs space-y-1.5 leading-relaxed text-sky-900 dark:text-sky-200">
-                <span className="font-bold block flex items-center gap-1.5 text-sky-600 dark:text-sky-400">
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>ບົດສະຫຼຸບເປົ້າໝາຍການຂາຍ:</span>
-                </span>
-                <p>
-                  • ຖ້າທ່ານຕ້ອງການ **ຄືນທຶນ 40 ລ້ານພາຍໃນ {targetMonths} ເດືອນ**: ທ່ານຕ້ອງຕັ້ງເປົ້າຂາຍໃຫ້ໄດ້ຢ່າງໜ້ອຍ <b className="text-amber-500 font-mono text-sm">{salesPlannerFormula.targetDailyPieces} ກ້ອນ / ວັນ</b> (ຍອດຂາຍປະມານ <b className="font-mono">{Math.round(salesPlannerFormula.targetDailyRevenue).toLocaleString()} ₭/ວັນ</b>).
-                </p>
-                <p>
-                  • ໃນ {salesPlannerFormula.targetDailyPieces} ກ້ອນນັ້ນ: **29 ກ້ອນທຳອິດ** ຈະໄປກວມເອົາຄ່າເຊົ່າ ແລະ ເງິນເດືອນ, ສ່ວນ **14 ກ້ອນທີ່ເຫຼືອ** ຈະກາຍເປັນເງິນກຳໄລສຸດທິເດືອນລະ <b className="font-mono text-emerald-500">{Math.round(salesPlannerFormula.monthlyRecoveryQuota).toLocaleString()} ₭</b> ມາຕັດຄືນຄ່າສູດ 40 ລ້ານໃຫ້ຄົບຖ້ວນໃນເດືອນທີ {targetMonths}!
-                </p>
-              </div>
-            </div>
-
-          </div>
-
         </div>
       )}
 
-      {/* Modal ດຶງໃບບິນ Supplier */}
+      {/* 📥 MODAL ດຶງໃບບິນ SUPPLIER ຕາມວັນທີ (DEFAULT = ວັນປັດຈຸບັນ) */}
       {isSupplierModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setIsSupplierModalOpen(false)}>
           <div className="bg-white dark:bg-[#141414] rounded-3xl p-6 border border-slate-200 dark:border-neutral-800 max-w-2xl w-full space-y-4 max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center border-b border-slate-100 dark:border-neutral-800 pb-3">
               <div>
                 <h3 className="text-sm font-serif text-slate-800 dark:text-white">ດຶງລາຍການຈາກໃບບິນ Supplier ມາລົງບັນຊີ (COGS & CAPEX)</h3>
-                <p className="text-[10px] text-slate-400 mt-0.5">ລະບົບຈະກວດສອບອັດຕະໂນມັດ ຖ້າເປັນອຸປະກອນຈະແລ່ນເຂົ້າ CAPEX, ຖ້າເປັນວັດຖຸດິບຈະເຂົ້າ COGS</p>
+                <p className="text-[10px] text-slate-400 mt-0.5">ເລືອກວັນທີເພື່ອດຶງສະເພາະໃບບິນຂອງວັນນັ້ນ (ເລີ່ມຕົ້ນດ້ວຍວັນປັດຈຸບັນ)</p>
               </div>
               <button onClick={() => setIsSupplierModalOpen(false)} className="text-slate-400 hover:text-white">✕</button>
             </div>
 
-            <div className="space-y-4">
-              {Object.keys(groupedSupplierPricesByDate).length === 0 ? (
-                <p className="text-center py-8 text-xs text-slate-400">ຍັງບໍ່ມີລາຍການຊື້ຈາກ Supplier</p>
+            {/* 🌟 ຊ່ອງເລືອກວັນທີຂອງໃບບິນ SUPPLIER (DEFAULT = TODAY) */}
+            <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-[#1c1c1c] border border-slate-200/60 dark:border-neutral-800 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-sky-500" />
+                <span className="text-xs font-bold text-slate-700 dark:text-neutral-200">ເລືອກວັນທີໃບບິນ:</span>
+                <input
+                  type="date"
+                  value={importFilterDate === 'all' ? '' : importFilterDate}
+                  onChange={e => setImportFilterDate(e.target.value || 'all')}
+                  className="crystal-input !py-1 !text-xs font-mono font-bold"
+                />
+              </div>
+
+              <div className="flex gap-1.5 text-xs font-bold">
+                <button
+                  type="button"
+                  onClick={() => setImportFilterDate(format(new Date(), 'yyyy-MM-dd'))}
+                  className={`px-3 py-1 rounded-xl cursor-pointer ${importFilterDate === format(new Date(), 'yyyy-MM-dd') ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950' : 'bg-neutral-200 dark:bg-neutral-800 text-slate-400'}`}
+                >
+                  ມື້ນີ້
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setImportFilterDate('all')}
+                  className={`px-3 py-1 rounded-xl cursor-pointer ${importFilterDate === 'all' ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950' : 'bg-neutral-200 dark:bg-neutral-800 text-slate-400'}`}
+                >
+                  ທັງໝົດ
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {filteredSupplierPricesForImport.length === 0 ? (
+                <div className="text-center py-10 space-y-2">
+                  <p className="text-xs text-slate-400">ບໍ່ພົບໃບບິນ Supplier ໃນວັນທີ {importFilterDate === 'all' ? 'ໃດໆ' : importFilterDate}</p>
+                  <button onClick={() => setImportFilterDate('all')} className="text-xs font-bold text-sky-500 hover:underline">
+                    ກົດເພື່ອສະແດງໃບບິນທຸກວັນທີ
+                  </button>
+                </div>
               ) : (
-                Object.keys(groupedSupplierPricesByDate).map(dateKey => (
-                  <div key={dateKey} className="space-y-2 border border-slate-200/80 dark:border-neutral-800 rounded-2xl p-4">
-                    <div className="flex justify-between items-center border-b border-slate-100 dark:border-neutral-800/80 pb-2">
-                      <span className="text-xs font-bold font-mono text-slate-700 dark:text-slate-200">📅 ວັນທີ: {dateKey}</span>
-                      <span className="text-[10px] text-slate-400">{groupedSupplierPricesByDate[dateKey].length} ລາຍການ</span>
-                    </div>
+                filteredSupplierPricesForImport.map(sp => {
+                  const pr = products.find(p => p.id === sp.productId);
+                  const catType = pr?.categoryType || (pr?.isDurable ? 'EQUIPMENT' : 'COGS');
+                  const total = sp.totalPriceLAK || (sp.currency === 'LAK' ? sp.priceOriginal : sp.priceOriginal * sp.exchangeRate);
+                  const isChecked = !!selectedSupplierItems[sp.id];
 
-                    <div className="space-y-1.5 pt-1">
-                      {groupedSupplierPricesByDate[dateKey].map(sp => {
-                        const pr = products.find(p => p.id === sp.productId);
-                        const catType = pr?.categoryType || (pr?.isDurable ? 'EQUIPMENT' : 'COGS');
-                        const total = sp.totalPriceLAK || (sp.currency === 'LAK' ? sp.priceOriginal : sp.priceOriginal * sp.exchangeRate);
-                        const isChecked = !!selectedSupplierItems[sp.id];
-
-                        return (
-                          <div 
-                            key={sp.id} 
-                            onClick={() => setSelectedSupplierItems(prev => ({ ...prev, [sp.id]: !prev[sp.id] }))}
-                            className={`p-3 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${isChecked ? 'bg-emerald-500/10 border-emerald-500' : 'bg-slate-50 dark:bg-[#1a1a1a] border-slate-200/50 dark:border-neutral-800'}`}
-                          >
-                            <div className="flex items-center gap-3">
-                              <input 
-                                type="checkbox" 
-                                checked={isChecked} 
-                                onChange={() => {}} 
-                                className="w-4 h-4 rounded text-emerald-500" 
-                              />
-                              <div>
-                                <div className="flex items-center gap-1.5">
-                                  <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase ${
-                                    catType === 'EQUIPMENT' ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                                  }`}>
-                                    {catType === 'EQUIPMENT' ? 'CAPEX (ອຸປະກອນ)' : 'COGS (ວັດຖຸດິບ)'}
-                                  </span>
-                                  <span className="text-xs font-bold text-slate-800 dark:text-white">{pr?.name || 'Item'}</span>
-                                </div>
-                                <span className="text-[10px] text-slate-400">{sp.supplier} • {sp.quantity}ແພັກ</span>
-                              </div>
-                            </div>
-                            <span className="text-xs font-mono font-bold text-emerald-500">+{Math.round(total).toLocaleString()} ₭</span>
+                  return (
+                    <div 
+                      key={sp.id} 
+                      onClick={() => setSelectedSupplierItems(prev => ({ ...prev, [sp.id]: !prev[sp.id] }))}
+                      className={`p-3.5 rounded-2xl border flex items-center justify-between cursor-pointer transition-all ${isChecked ? 'bg-emerald-500/10 border-emerald-500' : 'bg-slate-50 dark:bg-[#1a1a1a] border-slate-200/50 dark:border-neutral-800'}`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <input 
+                          type="checkbox" 
+                          checked={isChecked} 
+                          onChange={() => {}} 
+                          className="w-4 h-4 rounded text-emerald-500" 
+                        />
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase ${
+                              catType === 'EQUIPMENT' ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                            }`}>
+                              {catType === 'EQUIPMENT' ? 'CAPEX (ອຸປະກອນ)' : 'COGS (ວັດຖຸດິບ)'}
+                            </span>
+                            <span className="text-xs font-bold text-slate-800 dark:text-white">{pr?.name || 'Item'}</span>
                           </div>
-                        );
-                      })}
+                          <span className="text-[10px] text-slate-400 font-mono mt-0.5 block">{sp.date} • {sp.supplier} • {sp.quantity}ແພັກ</span>
+                        </div>
+                      </div>
+                      <span className="text-xs font-mono font-bold text-emerald-500">+{Math.round(total).toLocaleString()} ₭</span>
                     </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
 
@@ -932,28 +934,185 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
         </div>
       )}
 
-      {/* Modal ປ່ຽນປະເພດຕົ້ນທຶນ (40M OPEX -> CAPEX) */}
-      {editingBucketTx && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm" onClick={() => setEditingBucketTx(null)}>
-          <div className="bg-white dark:bg-[#141414] rounded-3xl p-6 border border-slate-200 dark:border-neutral-800 max-w-sm w-full space-y-4" onClick={e => e.stopPropagation()}>
-            <h3 className="text-sm font-serif text-slate-800 dark:text-white">ປ່ຽນປະເພດຕົ້ນທຶນ</h3>
-            <p className="text-xs text-slate-400 leading-normal">
-              ເລືອກກຸ່ມຕົ້ນທຶນໃໝ່ສຳລັບລາຍການ "{editingBucketTx.description || editingBucketTx.category}" ({Number(editingBucketTx.amount).toLocaleString()} ₭):
-            </p>
+      {/* ✏️ MODAL ແກ້ໄຂທຸລະກຳ (EDIT TRANSACTION MODAL) */}
+      {editingTx && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm" onClick={() => setEditingTx(null)}>
+          <div className="bg-white dark:bg-[#141414] rounded-3xl p-6 border border-slate-200 dark:border-neutral-800 max-w-lg w-full space-y-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center border-b border-slate-100 dark:border-neutral-800 pb-3">
+              <h3 className="text-base font-serif text-slate-800 dark:text-white flex items-center gap-2">
+                <Edit2 className="w-4 h-4 text-sky-500" />
+                <span>ແກ້ໄຂທຸລະກຳການເງິນ</span>
+              </h3>
+              <button onClick={() => setEditingTx(null)} className="text-slate-400 hover:text-white p-1">✕</button>
+            </div>
 
-            <div className="grid grid-cols-2 gap-2 pt-2">
-              <button onClick={() => handleUpdateBucket(editingBucketTx.id, 'capex')} className="p-3 rounded-2xl bg-purple-500/10 border border-purple-500 text-purple-400 font-bold text-xs text-left cursor-pointer">
-                CAPEX (ຄ່າສູດ & ອຸປະກອນ)
-              </button>
-              <button onClick={() => handleUpdateBucket(editingBucketTx.id, 'cogs')} className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500 text-amber-400 font-bold text-xs text-left cursor-pointer">
-                COGS ວັດຖຸດິບ
-              </button>
-              <button onClick={() => handleUpdateBucket(editingBucketTx.id, 'opex')} className="p-3 rounded-2xl bg-blue-500/10 border border-blue-500 text-blue-400 font-bold text-xs text-left cursor-pointer">
-                OPEX ດຳເນີນງານ
-              </button>
-              <button onClick={() => handleUpdateBucket(editingBucketTx.id, 'dividend')} className="p-3 rounded-2xl bg-pink-500/10 border border-pink-500 text-pink-400 font-bold text-xs text-left cursor-pointer">
-                ປັນຜົນ (Dividend)
-              </button>
+            <form onSubmit={handleSaveEditedTx} className="space-y-4">
+              <div className="grid grid-cols-2 gap-2 bg-slate-100 dark:bg-neutral-900 p-1 rounded-2xl">
+                <button type="button" onClick={() => setEditingTx({ ...editingTx, type: 'income' })} className={`py-2 text-xs font-bold rounded-xl ${editingTx.type === 'income' ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950' : 'text-slate-400'}`}>+ ລາຍຮັບ</button>
+                <button type="button" onClick={() => setEditingTx({ ...editingTx, type: 'expense' })} className={`py-2 text-xs font-bold rounded-xl ${editingTx.type === 'expense' ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950' : 'text-slate-400'}`}>- ລາຍຈ່າຍ</button>
+              </div>
+
+              <div>
+                <label className="label-xs block mb-1">ຈຳນວນເງິນ (LAK)</label>
+                <input
+                  type="text"
+                  required
+                  value={editAmountDisplay}
+                  onChange={e => {
+                    const raw = e.target.value.replace(/,/g, '');
+                    setEditAmountDisplay(raw ? Number(raw).toLocaleString() : '');
+                    setEditingTx({ ...editingTx, amountInput: Number(raw) || 0 });
+                  }}
+                  className="crystal-input w-full font-mono text-base font-bold"
+                />
+              </div>
+
+              {editingTx.type === 'expense' && (
+                <div>
+                  <label className="label-xs block mb-1">ກຸ່ມຕົ້ນທຶນ (Bucket)</label>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {[
+                      { id: 'cogs', name: 'COGS ວັດຖຸດິບ' },
+                      { id: 'opex', name: 'OPEX ດຳເນີນງານ' },
+                      { id: 'capex', name: 'CAPEX ອຸປະກອນ/ສູດ' },
+                      { id: 'dividend', name: 'ປັນຜົນ' }
+                    ].map(b => (
+                      <button
+                        key={b.id}
+                        type="button"
+                        onClick={() => setEditingTx({ ...editingTx, expenseBucket: b.id })}
+                        className={`p-2 rounded-xl text-xs font-bold border text-left ${editingTx.expenseBucket === b.id ? 'border-[#052659] dark:border-white bg-[#052659]/5 dark:bg-white/5 font-black' : 'border-slate-200 dark:border-neutral-800 text-slate-400'}`}
+                      >
+                        {b.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="label-xs block mb-1">ວັນທີ</label>
+                  <input
+                    type="date"
+                    required
+                    value={editingTx.date}
+                    onChange={e => setEditingTx({ ...editingTx, date: e.target.value })}
+                    className="crystal-input w-full !text-xs font-mono font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="label-xs block mb-1">ເວລາ</label>
+                  <input
+                    type="time"
+                    required
+                    value={editingTx.time || '12:00'}
+                    onChange={e => setEditingTx({ ...editingTx, time: e.target.value })}
+                    className="crystal-input w-full !text-xs font-mono font-bold"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="label-xs block mb-1">ຊ່ອງທາງຊຳລະ</label>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {['cash', 'onepay', 'ldb'].map(s => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => setEditingTx({ ...editingTx, source: s })}
+                      className={`py-2 text-xs font-bold rounded-xl border uppercase ${editingTx.source === s ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950 border-transparent' : 'border-slate-200 dark:border-neutral-800 text-slate-500'}`}
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="label-xs block mb-1">ລາຍລະອຽດ</label>
+                <input
+                  type="text"
+                  value={editingTx.description || ''}
+                  onChange={e => setEditingTx({ ...editingTx, description: e.target.value })}
+                  className="crystal-input w-full !text-xs"
+                />
+              </div>
+
+              {/* ຮູບໃບບິນ */}
+              <div>
+                <label className="label-xs flex justify-between mb-1">
+                  <span>ຮູບໃບບິນ (Ctrl+V)</span>
+                </label>
+                <div className="border border-dashed border-slate-300 dark:border-neutral-700 rounded-xl p-2 relative flex items-center justify-between">
+                  <input type="file" accept="image/*" onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (file) setEditingTx({ ...editingTx, receiptImage: await compressImage(file) });
+                  }} className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" />
+                  {editingTx.receiptImage ? (
+                    <div className="flex items-center gap-2 w-full justify-between">
+                      <img src={editingTx.receiptImage} alt="Receipt" className="w-8 h-8 rounded-lg object-cover border border-neutral-700" />
+                      <span className="text-[10px] text-emerald-500 font-bold">ອັບໂຫຼດແລ້ວ ✓</span>
+                      <button type="button" onClick={(e) => { e.stopPropagation(); setEditingTx({ ...editingTx, receiptImage: '' }); }} className="text-rose-500 p-1">✕</button>
+                    </div>
+                  ) : (
+                    <span className="text-xs text-slate-400 mx-auto flex items-center gap-1.5"><Upload className="w-3.5 h-3.5" /> ຄລິກ ຫຼື ວາງຮູບ (Ctrl+V)</span>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-neutral-800">
+                <button type="button" onClick={() => setEditingTx(null)} className="px-4 py-2 rounded-xl border text-xs font-bold text-slate-400">ຍົກເລີກ</button>
+                <button type="submit" className="crystal-button">ບັນທຶກການແກ້ໄຂ</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 🌟 VIRTUAL POS RECEIPT VIEWER FOR SALES BILLS */}
+      {viewingPosBill && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setViewingPosBill(null)}>
+          <div 
+            className="bg-[#faf7f0] text-slate-800 w-full max-w-sm rounded-3xl p-6 shadow-2xl relative border-t-8 border-dashed border-[#052659] max-h-[92vh] overflow-y-auto"
+            style={{ fontFamily: "'Courier New', Courier, monospace" }}
+            onClick={e => e.stopPropagation()}
+          >
+            <button onClick={() => setViewingPosBill(null)} className="absolute top-4 right-4 p-1.5 rounded-full bg-slate-200/60 hover:bg-slate-300 text-slate-600 cursor-pointer">
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="text-center space-y-1 border-b border-dashed border-slate-300 pb-3">
+              <h2 className="text-xl font-serif font-black uppercase text-slate-900 tracking-tight">LE OUVE WORKSPACE</h2>
+              <p className="text-[10px] text-slate-500 uppercase tracking-widest leading-none">Bakery & Cafe Architecture</p>
+              <div className="pt-2 text-[10px] text-slate-600 text-left space-y-0.5 font-mono">
+                <div className="flex justify-between"><span>BILL: {viewingPosBill.billNo}</span><span>{viewingPosBill.date} {viewingPosBill.time}</span></div>
+                <div className="flex justify-between font-bold text-slate-900"><span>CUSTOMER: {viewingPosBill.customerName}</span><span className="uppercase">{viewingPosBill.paymentMethod}</span></div>
+              </div>
+            </div>
+
+            {/* Line items with photos */}
+            <div className="py-3 space-y-2 border-b border-dashed border-slate-300">
+              {viewingPosBill.items?.map((it: any, idx: number) => (
+                <div key={idx} className="flex items-center gap-2 py-1">
+                  {it.recipeImage && <img src={it.recipeImage} alt={it.menuName} className="w-8 h-8 rounded-lg object-cover border border-slate-300 shrink-0" />}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-black text-slate-900 truncate">{it.menuName}</p>
+                    <p className="text-[10px] text-slate-500 font-mono">{it.soldQty} × {Number(it.sellingPrice).toLocaleString()}</p>
+                  </div>
+                  <span className="text-xs font-mono font-black text-slate-900">{it.lineRevenue?.toLocaleString()} ₭</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="py-3 flex justify-between text-sm font-black text-slate-900">
+              <span>ຍອດລວມ (TOTAL):</span>
+              <span>{Number(viewingPosBill.totalRevenue).toLocaleString()} ₭</span>
+            </div>
+
+            <div className="pt-2 flex gap-2">
+              <button onClick={() => window.print()} className="flex-1 py-2 rounded-xl bg-slate-900 text-white font-sans text-xs font-bold cursor-pointer">Print Receipt</button>
+              <button onClick={() => setViewingPosBill(null)} className="px-4 py-2 rounded-xl bg-slate-200 text-slate-700 font-sans text-xs font-bold cursor-pointer">ປິດ</button>
             </div>
           </div>
         </div>
