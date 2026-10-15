@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
-  collection, onSnapshot, addDoc, setDoc, deleteDoc, doc, serverTimestamp 
+  collection, onSnapshot, addDoc, setDoc, deleteDoc, doc, serverTimestamp, updateDoc 
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { useTranslation } from 'react-i18next';
@@ -9,7 +9,7 @@ import {
   BookOpen, Plus, Trash2, Edit2, Calendar, 
   Package, ShoppingCart, Layers, Zap, Utensils, FileText,
   DollarSign, TrendingUp, Sparkles, Tag, Upload, X, Receipt, Printer, CheckCircle2,
-  Eye, User
+  Eye, User, Clock, CheckCircle, Edit3, Gift
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -64,7 +64,7 @@ const BottleGauge = ({ currentMl, packSize = 1000 }: { currentMl: number; packSi
   return (
     <div className="flex items-center gap-2.5 p-2 bg-slate-50 dark:bg-[#1a1a1a] rounded-2xl border border-slate-200/70 dark:border-neutral-800">
       <div className="relative w-6 h-12 flex items-end justify-center shrink-0">
-        <svg viewBox="0 0 32 64" className="w-6 h-12 text-slate-300 dark:text-neutral-700">
+        <svg viewBox="0 2 32 64" className="w-6 h-12 text-slate-300 dark:text-neutral-700">
           <rect x="11" y="2" width="10" height="5" rx="1.5" fill="currentColor" opacity="0.8" />
           <rect x="12" y="7" width="8" height="8" fill="none" stroke="currentColor" strokeWidth="2" />
           <path d="M 12 15 C 6 18 4 22 4 28 L 4 58 C 4 61 7 62 10 62 L 22 62 C 25 62 28 61 28 58 L 28 28 C 28 22 26 18 20 15 Z" fill="none" stroke="currentColor" strokeWidth="2" />
@@ -133,7 +133,16 @@ export default function Inventory() {
   const [orderPaymentMethod, setOrderPaymentMethod] = useState<'onepay' | 'cash' | 'ldb'>('onepay');
   const [activeViewingBill, setActiveViewingBill] = useState<any | null>(null);
 
-  // 🌟 ແກ້ໄຂແລ້ວ: ດຶງຂໍ້ມູນ ແລະ ຮຽງລຳດັບໃນ JavaScript ບໍ່ຕ້ອງເພິ່ງ Index ໃນ Console
+  // 🌟 ແກ້ໄຂບິນ POS & ເຄຍບິນ POS States
+  const [editingPosBill, setEditingPosBill] = useState<any | null>(null);
+  const [settlingPosBill, setSettlingPosBill] = useState<any | null>(null);
+  const [settlingSlip, setSettlingSlip] = useState<string>('');
+  const [settlingItems, setSettlingItems] = useState<any[]>([]);
+  const [settlingPaymentMethod, setSettlingPaymentMethod] = useState<'onepay' | 'cash' | 'ldb'>('onepay');
+  const [isSettling, setIsSettling] = useState(false);
+  const [billFilter, setBillFilter] = useState<'all' | 'pending' | 'settled'>('all');
+
+  // Realtime Subscriptions
   useEffect(() => {
     const unsubP = onSnapshot(collection(db, 'products'), snap => {
       const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -166,8 +175,8 @@ export default function Inventory() {
     const unsubBills = onSnapshot(collection(db, 'pos_bills'), snap => {
       const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       data.sort((a: any, b: any) => {
-        const tA = a.createdAt?.toDate?.()?.getTime() || 0;
-        const tB = b.createdAt?.toDate?.()?.getTime() || 0;
+        const tA = a.createdAt?.toDate?.()?.getTime() || new Date(a.date || 0).getTime() || 0;
+        const tB = b.createdAt?.toDate?.()?.getTime() || new Date(b.date || 0).getTime() || 0;
         return tB - tA;
       });
       setPosBills(data);
@@ -190,10 +199,9 @@ export default function Inventory() {
     }
   }, [selectedDate, recipes, salesRecords]);
 
-  // Clipboard Paste (Ctrl+V)
+  // Clipboard Paste (Ctrl+V) ສຳລັບຮູບສູດ ແລະ ຮູບສະລິບເຄຍບິນ
   useEffect(() => {
     const handlePaste = async (e: ClipboardEvent) => {
-      if (!isRecipeModalOpen) return;
       const items = e.clipboardData?.items;
       if (!items) return;
       for (let i = 0; i < items.length; i++) {
@@ -202,14 +210,18 @@ export default function Inventory() {
           if (file) {
             e.preventDefault();
             const b64 = await compressImage(file);
-            setRecipeImage(b64);
+            if (isRecipeModalOpen) {
+              setRecipeImage(b64);
+            } else if (settlingPosBill) {
+              setSettlingSlip(b64);
+            }
           }
         }
       }
     };
     window.addEventListener('paste', handlePaste);
     return () => window.removeEventListener('paste', handlePaste);
-  }, [isRecipeModalOpen]);
+  }, [isRecipeModalOpen, settlingPosBill]);
 
   // Dropdown options from Supplier Prices
   const supplierProductOptions = useMemo(() => {
@@ -462,7 +474,9 @@ export default function Inventory() {
     };
   }, [recipeIngredients, batchYield, overheadCost, sellingPrice]);
 
-  // COMMIT & ISSUE POS BILL
+  // ========================================================
+  // 🌟 COMMIT POS BILL: ຕັດສະຕັອກ & ສົ່ງເຂົ້າ AR ໜີ້ຕ້ອງຮັບ
+  // ========================================================
   const handleCommitCustomerBill = async () => {
     const activeSoldItems = recipesWithCalculatedCosts
       .filter(r => (quantitiesSold[r.id] || 0) > 0)
@@ -477,6 +491,9 @@ export default function Inventory() {
           sellingPrice: r.sellingPrice,
           totalCostPerUnit: r.totalCostPerUnit,
           recipeImage: r.recipeImage || '',
+          producedQty: qty,
+          actualSoldQty: qty,
+          sampleQty: 0,
           soldQty: qty,
           lineRevenue,
           lineCost,
@@ -497,6 +514,18 @@ export default function Inventory() {
       const totalQty = activeSoldItems.reduce((sum, it) => sum + it.soldQty, 0);
       const billNo = `POS-${format(new Date(), 'yyMMdd')}-${Math.floor(1000 + Math.random() * 9000)}`;
 
+      // 1. 🌟 ສົ່ງຍອດເຂົ້າ collection 'debts' (AR - ໜີ້ຕ້ອງຮັບ) ໃນ Finance ທັນທີ
+      const debtRef = await addDoc(collection(db, 'debts'), {
+        type: 'receivable', // ໜີ້ຕ້ອງຮັບ
+        person: customerName.trim() || 'ລູກຄ້າທົ່ວໄປ (General)',
+        amount: totalRevenue,
+        dueDate: selectedDate,
+        status: 'pending', // ລໍຖ້າຊຳລະ
+        remark: `ບິນ POS ${billNo} ${orderNote ? `(${orderNote})` : ''}`,
+        createdAt: serverTimestamp()
+      });
+
+      // 2. 🌟 ສ້າງໃບບິນ POS ທີ່ມີສະຖານະ 'pending'
       const newBillData = {
         billNo,
         date: selectedDate,
@@ -507,12 +536,16 @@ export default function Inventory() {
         items: activeSoldItems,
         totalQty,
         totalRevenue,
+        actualRevenue: 0,
         totalCost,
         totalProfit,
+        status: 'pending', // 🌟 ລໍຖ້າເຄຍ
+        debtId: debtRef.id,
         createdAt: serverTimestamp()
       };
       await addDoc(collection(db, 'pos_bills'), newBillData);
 
+      // 3. ຕັດສະຕັອກໃນ menu_sales ຕາມປົກກະຕິ
       const currentDaySales = salesRecords.find(r => r.date === selectedDate)?.itemsSold || {};
       const updatedSalesMap = { ...currentDaySales };
       activeSoldItems.forEach(it => {
@@ -523,19 +556,6 @@ export default function Inventory() {
         itemsSold: updatedSalesMap,
         updatedAt: serverTimestamp()
       }, { merge: true });
-
-      if (totalRevenue > 0) {
-        await addDoc(collection(db, 'transactions'), {
-          type: 'income',
-          amount: totalRevenue,
-          category: 'ຂາຍເຄື່ອງດື່ມ & ເຂົ້າໜົມ (Sales)',
-          source: orderPaymentMethod,
-          description: `ບິນ POS ${billNo} - ${customerName.trim() || 'ລູກຄ້າທົ່ວໄປ'} ${orderNote ? `(${orderNote})` : ''}`,
-          date: selectedDate,
-          time: format(new Date(), 'HH:mm'),
-          createdAt: serverTimestamp()
-        });
-      }
 
       setActiveViewingBill(newBillData);
 
@@ -552,6 +572,121 @@ export default function Inventory() {
     }
   };
 
+  // ========================================================
+  // 🌟 ແກ້ໄຂບິນ POS (EDIT POS BILL HANDLER)
+  // ========================================================
+  const handleSaveEditedPosBill = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingPosBill) return;
+
+    try {
+      const recTotalRevenue = editingPosBill.items.reduce((s: number, it: any) => s + (Number(it.soldQty || it.producedQty || 0) * Number(it.sellingPrice || 0)), 0);
+      const recTotalQty = editingPosBill.items.reduce((s: number, it: any) => s + Number(it.soldQty || it.producedQty || 0), 0);
+
+      await updateDoc(doc(db, 'pos_bills', editingPosBill.id), {
+        customerName: editingPosBill.customerName,
+        orderNote: editingPosBill.orderNote || '',
+        paymentMethod: editingPosBill.paymentMethod,
+        items: editingPosBill.items,
+        totalRevenue: recTotalRevenue,
+        totalQty: recTotalQty,
+        updatedAt: serverTimestamp()
+      });
+
+      // ອັບເດດຍອດ AR ໃນ debts ຖ້າຍັງຄ້າງຊຳລະ
+      if (editingPosBill.debtId && editingPosBill.status !== 'settled') {
+        await updateDoc(doc(db, 'debts', editingPosBill.debtId), {
+          person: editingPosBill.customerName,
+          amount: recTotalRevenue
+        });
+      }
+
+      setEditingPosBill(null);
+      alert("ແກ້ໄຂບິນ POS ສຳເລັດແລ້ວ!");
+    } catch (err: any) {
+      alert("Error: " + err.message);
+    }
+  };
+
+  // ========================================================
+  // 🌟 ເຄຍບິນ POS (SETTLE POS BILL -> PUSH TO TRANSACTIONS)
+  // ========================================================
+  const handleOpenSettleModal = (bill: any) => {
+    setSettlingPosBill(bill);
+    setSettlingSlip(bill.receiptImage || '');
+    setSettlingPaymentMethod(bill.paymentMethod || 'onepay');
+    setSettlingItems(
+      (bill.items || []).map((it: any) => ({
+        ...it,
+        actualSoldQty: it.actualSoldQty !== undefined ? it.actualSoldQty : (it.soldQty || it.producedQty || 0),
+        sampleQty: it.sampleQty !== undefined ? it.sampleQty : 0
+      }))
+    );
+  };
+
+  const handleConfirmSettleBill = async () => {
+    if (!settlingPosBill) return;
+    setIsSettling(true);
+
+    try {
+      const finalRevenue = settlingItems.reduce((sum, it) => sum + (Number(it.actualSoldQty || 0) * Number(it.sellingPrice || 0)), 0);
+      const totalSamples = settlingItems.reduce((sum, it) => sum + Number(it.sampleQty || 0), 0);
+      const today = format(new Date(), 'yyyy-MM-dd');
+      const timeNow = format(new Date(), 'HH:mm');
+
+      // 1. 🌟 ສົ່ງຍອດລາຍຮັບຕົວຈິງເຂົ້າ collection 'transactions' ຂອງ Finance (Dashboard ຂຶ້ນທັນທີ!)
+      const txRef = await addDoc(collection(db, 'transactions'), {
+        type: 'income',
+        amount: finalRevenue,
+        category: 'ຂາຍເຄື່ອງດື່ມ & ເຂົ້າໜົມ (Sales)',
+        source: settlingPaymentMethod,
+        description: `ບິນ POS ${settlingPosBill.billNo} - ${settlingPosBill.customerName} ${totalSamples > 0 ? `(ແຖມ/ຊິມ ${totalSamples} ຊິ້ນ)` : ''}`,
+        date: today,
+        time: timeNow,
+        receiptImage: settlingSlip || '',
+        createdAt: serverTimestamp()
+      });
+
+      // 2. 🌟 ອັບເດດບິນ POS ເປັນ 'settled'
+      await updateDoc(doc(db, 'pos_bills', settlingPosBill.id), {
+        status: 'settled',
+        items: settlingItems,
+        actualRevenue: finalRevenue,
+        paymentMethod: settlingPaymentMethod,
+        receiptImage: settlingSlip || '',
+        transactionId: txRef.id,
+        settledAt: serverTimestamp()
+      });
+
+      // 3. 🌟 ອັບເດດໜີ້ AR ໃນ collection 'debts' ເປັນ 'settled'
+      if (settlingPosBill.debtId) {
+        await updateDoc(doc(db, 'debts', settlingPosBill.debtId), {
+          status: 'settled',
+          amount: finalRevenue,
+          receiptImage: settlingSlip || '',
+          updatedAt: serverTimestamp()
+        });
+      }
+
+      setSettlingPosBill(null);
+      setSettlingSlip('');
+      alert("ເຄຍບິນສຳເລັດແລ້ວ! ຍອດຂາຍຖືກບັນທຶກເຂົ້າ Dashboard ແລະ Finance ຮຽບຮ້ອຍ.");
+    } catch (err: any) {
+      alert("Error: " + err.message);
+    } finally {
+      setIsSettling(false);
+    }
+  };
+
+  // Filter ບິນ POS
+  const filteredPosBills = useMemo(() => {
+    return posBills.filter(b => {
+      if (billFilter === 'pending' && b.status !== 'pending') return false;
+      if (billFilter === 'settled' && b.status !== 'settled') return false;
+      return true;
+    });
+  }, [posBills, billFilter]);
+
   return (
     <div className="space-y-6 font-sans pb-16">
       
@@ -565,7 +700,7 @@ export default function Inventory() {
             ສູດຄຸກກີ້, ເຂົ້າໜົມ & ລະບົບອອກບິນ POS
           </h1>
           <p className="text-xs text-slate-400 mt-0.5">
-            ອອກໃບບິນແຍກຕາມລູກຄ້າ, ໃສ່ Note ໝາຍເຫດ, ຕັດສະຕັອກ ແລະ ເບິ່ງປະຫວັດໃບບິນ POS ຍ້ອນຫຼັງໄດ້ທຸກເວລາ
+            ອອກໃບບິນແຍກຕາມລູກຄ້າ, ສົ່ງເຂົ້າໜີ້ຕ້ອງຮັບ (AR), ແກ້ໄຂບິນ ແລະ ເຄຍບິນຂຶ້ນ Dashboard
           </p>
         </div>
 
@@ -599,6 +734,9 @@ export default function Inventory() {
         >
           <Receipt className="w-3.5 h-3.5" />
           <span>ອອກບິນ POS & ປະຫວັດໃບບິນ</span>
+          {posBills.filter(b => b.status === 'pending').length > 0 && (
+            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+          )}
         </button>
         <button
           onClick={() => setSubTab('recipes')}
@@ -614,7 +752,9 @@ export default function Inventory() {
         </button>
       </div>
 
-      {/* TAB 1: POS BILLING */}
+      {/* ========================================================
+          TAB 1: POS BILLING & ARCHIVE
+          ======================================================== */}
       {subTab === 'sales' && (
         <div className="space-y-6">
           <div className="high-density-card p-6 space-y-4">
@@ -624,7 +764,7 @@ export default function Inventory() {
                   <User className="w-4 h-4 text-sky-500" />
                   <span>ອອກໃບບິນ POS ຕາມລູກຄ້າ / ອໍເດີ້ (New POS Order)</span>
                 </h3>
-                <p className="text-xs text-slate-400 mt-0.5">ໃສ່ຊື່ລູກຄ້າ, ໝາຍເຫດ ແລະ ກົດຈຳນວນສິນຄ້າດ້ານລຸ່ມເພື່ອອອກບິນ</p>
+                <p className="text-xs text-slate-400 mt-0.5">ໃສ່ຊື່ລູກຄ້າ, ໝາຍເຫດ ແລະ ກົດຈຳນວນສິນຄ້າດ້ານລຸ່ມ (ຍອດຈະແລ່ນເຂົ້າ AR ໜີ້ຕ້ອງຮັບ)</p>
               </div>
 
               <div className="flex items-center gap-2">
@@ -681,6 +821,7 @@ export default function Inventory() {
             </div>
           </div>
 
+          {/* Recipes to Select */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {recipesWithCalculatedCosts.map((rec) => {
               const qtySold = quantitiesSold[rec.id] || 0;
@@ -753,7 +894,7 @@ export default function Inventory() {
                 ອໍເດີ້ລູກຄ້າ: <span className="text-sky-500">{customerName || 'ລູກຄ້າທົ່ວໄປ'}</span> {orderNote && `(${orderNote})`}
               </p>
               <p className="text-[10px] text-slate-400">
-                ລວມ {Object.values(quantitiesSold).reduce((a, b) => a + b, 0)} ລາຍການ • ຊຳລະຜ່ານ {orderPaymentMethod.toUpperCase()}
+                ລວມ {Object.values(quantitiesSold).reduce((a, b) => a + b, 0)} ລາຍການ • ສົ່ງເຂົ້າ ໜີ້ຕ້ອງຮັບ (AR) • ຊຳລະຜ່ານ {orderPaymentMethod.toUpperCase()}
               </p>
             </div>
 
@@ -763,19 +904,43 @@ export default function Inventory() {
               className="crystal-button !py-3.5 !px-8 text-xs font-black tracking-wider uppercase shadow-xl flex items-center gap-2 cursor-pointer disabled:opacity-40"
             >
               <Receipt className="w-4 h-4" />
-              <span>{isDeducting ? 'PROCESSING...' : 'ອອກໃບບິນ POS & ຕັດສາງ (COMMIT)'}</span>
+              <span>{isDeducting ? 'PROCESSING...' : 'ອອກໃບບິນ POS (ສົ່ງເຂົ້າ AR & ຕັດສາງ)'}</span>
             </button>
           </div>
 
           {/* POS Bills Archive */}
           <div className="high-density-card p-6 overflow-hidden space-y-4">
-            <div className="flex justify-between items-center border-b border-slate-100 dark:border-neutral-800 pb-3">
+            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 border-b border-slate-100 dark:border-neutral-800 pb-3">
               <div>
                 <h3 className="text-sm font-serif text-slate-800 dark:text-white flex items-center gap-2">
                   <Receipt className="w-4 h-4 text-emerald-500" />
-                  <span>ປະຫວັດໃບບິນ POS ທັງໝົດ ({posBills.length} ໃບບິນ)</span>
+                  <span>ປະຫວັດໃບບິນ POS ({posBills.length} ໃບບິນ)</span>
                 </h3>
-                <p className="text-xs text-slate-400">ກົດໄອຄອນຕາເພື່ອເບິ່ງໃບບິນ POS ຕົວຈິງພ້ອມຮູບພາບຂະໜົມ ແລະ Note ຍ້ອນຫຼັງ</p>
+                <p className="text-xs text-slate-400">ກົດໄອຄອນຕາເພື່ອເບິ່ງບິນ • ກົດໄອຄອນສໍເພື່ອແກ້ໄຂ • ກົດ "ເຄຍບິນ" ເມື່ອລູກຄ້າຊຳລະແລ້ວ</p>
+              </div>
+
+              {/* Status Filter */}
+              <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-neutral-900 p-1 rounded-2xl text-xs font-bold">
+                <button
+                  onClick={() => setBillFilter('all')}
+                  className={`px-3 py-1 rounded-xl cursor-pointer ${billFilter === 'all' ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950' : 'text-slate-400'}`}
+                >
+                  ທັງໝົດ
+                </button>
+                <button
+                  onClick={() => setBillFilter('pending')}
+                  className={`px-3 py-1 rounded-xl cursor-pointer flex items-center gap-1 ${billFilter === 'pending' ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950' : 'text-slate-400'}`}
+                >
+                  <Clock className="w-3 h-3 text-amber-500" />
+                  <span>ລໍຖ້າເຄຍ ({posBills.filter(b => b.status === 'pending').length})</span>
+                </button>
+                <button
+                  onClick={() => setBillFilter('settled')}
+                  className={`px-3 py-1 rounded-xl cursor-pointer flex items-center gap-1 ${billFilter === 'settled' ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950' : 'text-slate-400'}`}
+                >
+                  <CheckCircle className="w-3 h-3 text-emerald-500" />
+                  <span>ເຄຍແລ້ວ</span>
+                </button>
               </div>
             </div>
 
@@ -787,42 +952,96 @@ export default function Inventory() {
                     <th className="p-3">ຊື່ລູກຄ້າ / ໂຕະ</th>
                     <th className="p-3">ໝາຍເຫດ (Note)</th>
                     <th className="p-3 text-center">ຈຳນວນ</th>
-                    <th className="p-3">ຊ່ອງທາງ</th>
+                    <th className="p-3 text-center">ສະຖານະ</th>
                     <th className="p-3 text-right">ຍອດລວມ (₭)</th>
-                    <th className="p-3 text-center">ເບິ່ງບິນ</th>
+                    <th className="p-3 text-center">ຈັດການ / ເຄຍບິນ</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-neutral-800">
-                  {posBills.map(bill => (
-                    <tr key={bill.id} className="hover:bg-slate-50/50 dark:hover:bg-neutral-800/30">
-                      <td className="p-3 whitespace-nowrap">
-                        <span className="font-mono font-bold text-slate-800 dark:text-white block">{bill.billNo}</span>
-                        <span className="text-[10px] text-slate-400 font-mono">{bill.date} • {bill.time}</span>
-                      </td>
-                      <td className="p-3 font-bold text-slate-800 dark:text-white">{bill.customerName}</td>
-                      <td className="p-3 text-slate-500 dark:text-neutral-400 italic text-[11px]">{bill.orderNote || '-'}</td>
-                      <td className="p-3 text-center font-mono font-bold">{bill.totalQty}</td>
-                      <td className="p-3 uppercase font-mono text-[10px]">
-                        <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-neutral-800 text-slate-400 font-bold">{bill.paymentMethod}</span>
-                      </td>
-                      <td className="p-3 text-right font-mono font-black text-emerald-500 text-sm whitespace-nowrap">
-                        {Number(bill.totalRevenue).toLocaleString()} ₭
-                      </td>
-                      <td className="p-3 text-center">
-                        <button
-                          onClick={() => setActiveViewingBill(bill)}
-                          className="p-1.5 rounded-lg bg-sky-500/10 hover:bg-sky-500/20 text-sky-500 cursor-pointer transition-colors"
-                          title="ເບິ່ງໃບບິນ POS"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                  {posBills.length === 0 && (
+                  {filteredPosBills.map(bill => {
+                    const isPending = bill.status === 'pending';
+                    return (
+                      <tr key={bill.id} className="hover:bg-slate-50/50 dark:hover:bg-neutral-800/30">
+                        <td className="p-3 whitespace-nowrap">
+                          <span className="font-mono font-bold text-slate-800 dark:text-white block">{bill.billNo}</span>
+                          <span className="text-[10px] text-slate-400 font-mono">{bill.date} • {bill.time}</span>
+                        </td>
+                        <td className="p-3 font-bold text-slate-800 dark:text-white">{bill.customerName}</td>
+                        <td className="p-3 text-slate-500 dark:text-neutral-400 italic text-[11px]">{bill.orderNote || '-'}</td>
+                        <td className="p-3 text-center font-mono font-bold">{bill.totalQty}</td>
+                        
+                        {/* Status Badge */}
+                        <td className="p-3 text-center whitespace-nowrap">
+                          <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase font-mono ${
+                            isPending ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20' : 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'
+                          }`}>
+                            {isPending ? 'ລໍຖ້າຊຳລະ (AR)' : 'ເຄຍແລ້ວ ✓'}
+                          </span>
+                        </td>
+
+                        <td className="p-3 text-right font-mono font-black text-emerald-500 text-sm whitespace-nowrap">
+                          {(bill.actualRevenue || bill.totalRevenue).toLocaleString()} ₭
+                        </td>
+                        
+                        {/* 🛠️ Action Buttons: ເບິ່ງ, ແກ້ໄຂ, ເຄຍບິນ */}
+                        <td className="p-3 text-center">
+                          <div className="flex items-center justify-center gap-1.5">
+                            {/* ເບິ່ງບິນ */}
+                            <button
+                              onClick={() => setActiveViewingBill(bill)}
+                              className="p-1.5 rounded-lg bg-sky-500/10 hover:bg-sky-500/20 text-sky-500 cursor-pointer transition-colors"
+                              title="ເບິ່ງໃບບິນ POS"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                            </button>
+
+                            {/* ✏️ ປຸ່ມແກ້ໄຂບິນ POS */}
+                            <button
+                              onClick={() => setEditingPosBill(bill)}
+                              className="p-1.5 rounded-lg bg-slate-100 dark:bg-neutral-800 hover:bg-slate-200 dark:hover:bg-neutral-700 text-slate-400 hover:text-white cursor-pointer transition-colors"
+                              title="ແກ້ໄຂບິນ POS"
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                            </button>
+
+                            {/* ⚡ ປຸ່ມເຄຍບິນ POS */}
+                            {isPending ? (
+                              <button
+                                onClick={() => handleOpenSettleModal(bill)}
+                                className="px-2.5 py-1 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-[10px] flex items-center gap-1 cursor-pointer shadow-xs"
+                                title="ເຄຍບິນ & ຮັບເງິນ"
+                              >
+                                <CheckCircle className="w-3 h-3" />
+                                <span>ເຄຍບິນ</span>
+                              </button>
+                            ) : (
+                              bill.receiptImage && (
+                                <span className="text-[10px] text-emerald-500 font-mono font-bold">✓ ມີສະລິບ</span>
+                              )
+                            )}
+
+                            {/* ລຶບ */}
+                            <button
+                              onClick={async () => {
+                                if (confirm(`ທ່ານຕ້ອງການລຶບໃບບິນ #${bill.billNo} ແທ້ຫຼືບໍ່?`)) {
+                                  await deleteDoc(doc(db, 'pos_bills', bill.id));
+                                  if (bill.debtId) await deleteDoc(doc(db, 'debts', bill.debtId));
+                                }
+                              }}
+                              className="p-1.5 text-slate-400 hover:text-rose-500 cursor-pointer"
+                              title="ລຶບ"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {filteredPosBills.length === 0 && (
                     <tr>
                       <td colSpan={7} className="py-8 text-center text-slate-400 italic">
-                        ຍັງບໍ່ທັນມີປະຫວັດການອອກໃບບິນ POS. ເລືອກຈຳນວນຂາຍແລ້ວກົດອອກບິນໄດ້ເລີຍ!
+                        ບໍ່ພົບລາຍການໃບບິນ POS ຕາມເງື່ອນໄຂ
                       </td>
                     </tr>
                   )}
@@ -833,7 +1052,9 @@ export default function Inventory() {
         </div>
       )}
 
-      {/* TAB 2: RECIPES CARDS */}
+      {/* ========================================================
+          TAB 2: RECIPES CARDS
+          ======================================================== */}
       {subTab === 'recipes' && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {recipesWithCalculatedCosts.map((recipe) => (
@@ -900,7 +1121,7 @@ export default function Inventory() {
                 )}
               </div>
 
-              {/* 🛠️ Edit Button: ປອດໄພ 100% ບໍ່ມີ Error ອີກເລີຍ */}
+              {/* Edit & Delete Buttons */}
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-neutral-800">
                 <button
                   onClick={() => {
@@ -956,7 +1177,9 @@ export default function Inventory() {
         </div>
       )}
 
-      {/* TAB 3: INVENTORY BALANCES */}
+      {/* ========================================================
+          TAB 3: INVENTORY BALANCES
+          ======================================================== */}
       {subTab === 'balances' && (
         <div className="high-density-card p-6 overflow-hidden space-y-4">
           <div className="border-b border-neutral-800 pb-3">
@@ -1015,6 +1238,244 @@ export default function Inventory() {
           </div>
         </div>
       )}
+
+      {/* ========================================================
+          ✏️ MODAL: ແກ້ໄຂບິນ POS (EDIT POS BILL MODAL)
+          ======================================================== */}
+      <AnimatePresence>
+        {editingPosBill && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setEditingPosBill(null)}>
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }} 
+              animate={{ opacity: 1, scale: 1 }} 
+              className="bg-white dark:bg-[#141414] rounded-3xl p-6 border border-slate-200 dark:border-neutral-800 max-w-lg w-full space-y-4 max-h-[90vh] overflow-y-auto"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex justify-between items-center border-b border-slate-100 dark:border-neutral-800 pb-3">
+                <h3 className="text-base font-serif text-slate-800 dark:text-white flex items-center gap-2">
+                  <Edit3 className="w-4 h-4 text-sky-500" />
+                  <span>ແກ້ໄຂບິນ POS #{editingPosBill.billNo}</span>
+                </h3>
+                <button onClick={() => setEditingPosBill(null)} className="text-slate-400 hover:text-white">✕</button>
+              </div>
+
+              <form onSubmit={handleSaveEditedPosBill} className="space-y-4 text-xs">
+                <div>
+                  <label className="label-xs block mb-1">ຊື່ລູກຄ້າ / ໂຕະ</label>
+                  <input
+                    type="text"
+                    required
+                    value={editingPosBill.customerName}
+                    onChange={e => setEditingPosBill({ ...editingPosBill, customerName: e.target.value })}
+                    className="crystal-input w-full font-bold"
+                  />
+                </div>
+
+                <div>
+                  <label className="label-xs block mb-1">ໝາຍເຫດ (Order Note)</label>
+                  <input
+                    type="text"
+                    value={editingPosBill.orderNote || ''}
+                    onChange={e => setEditingPosBill({ ...editingPosBill, orderNote: e.target.value })}
+                    className="crystal-input w-full"
+                  />
+                </div>
+
+                <div className="border border-slate-200 dark:border-neutral-800 rounded-2xl p-3 bg-slate-50 dark:bg-[#1c1c1c] space-y-2">
+                  <span className="label-xs block">ລາຍການເມນູໃນບິນ</span>
+                  {editingPosBill.items?.map((it: any, idx: number) => (
+                    <div key={idx} className="flex justify-between items-center gap-2 pt-1 border-t border-slate-200 dark:border-neutral-800 first:border-0 first:pt-0">
+                      <span className="font-bold text-slate-800 dark:text-white flex-1">{it.menuName}</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-slate-400 text-[10px]">ຈຳນວນ:</span>
+                        <input
+                          type="number"
+                          min="1"
+                          value={it.soldQty || it.producedQty || 1}
+                          onChange={e => {
+                            const val = Number(e.target.value) || 1;
+                            const updated = [...editingPosBill.items];
+                            updated[idx].soldQty = val;
+                            updated[idx].producedQty = val;
+                            updated[idx].lineRevenue = val * updated[idx].sellingPrice;
+                            setEditingPosBill({ ...editingPosBill, items: updated });
+                          }}
+                          className="w-14 crystal-input !py-1 text-center font-mono font-bold"
+                        />
+                      </div>
+                      <span className="w-20 text-right font-mono font-bold text-emerald-500">
+                        {((it.soldQty || it.producedQty || 1) * it.sellingPrice).toLocaleString()} ₭
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex justify-between items-center p-3 rounded-2xl bg-slate-100 dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 font-mono">
+                  <span className="text-xs text-slate-500 font-bold">ຍອດລວມໃໝ່:</span>
+                  <span className="text-base font-bold text-emerald-500">
+                    {editingPosBill.items?.reduce((s: number, it: any) => s + ((it.soldQty || it.producedQty || 1) * it.sellingPrice), 0).toLocaleString()} ₭
+                  </span>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-neutral-800">
+                  <button type="button" onClick={() => setEditingPosBill(null)} className="px-4 py-2 rounded-xl border text-xs font-bold text-slate-400">ຍົກເລີກ</button>
+                  <button type="submit" className="crystal-button">ບັນທຶກການແກ້ໄຂ</button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ========================================================
+          ⚡ MODAL: ເຄຍບິນ POS (SETTLE POS BILL MODAL)
+          ======================================================== */}
+      <AnimatePresence>
+        {settlingPosBill && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm" onClick={() => setSettlingPosBill(null)}>
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }} 
+              animate={{ opacity: 1, scale: 1 }} 
+              className="bg-white dark:bg-[#141414] rounded-3xl p-6 border border-slate-200 dark:border-neutral-800 max-w-lg w-full space-y-4 max-h-[92vh] overflow-y-auto"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex justify-between items-center border-b border-slate-100 dark:border-neutral-800 pb-3">
+                <div>
+                  <h3 className="text-base font-serif text-slate-800 dark:text-white flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-emerald-500" />
+                    <span>ເຄຍບິນ POS #{settlingPosBill.billNo}</span>
+                  </h3>
+                  <p className="text-[10px] text-slate-400 mt-0.5">
+                    ລູກຄ້າ: <strong className="text-slate-800 dark:text-white">{settlingPosBill.customerName}</strong> • ເມື່ອກົດເຄຍ ຍອດຂາຍຈະຂຶ້ນ Dashboard ທັນທີ!
+                  </p>
+                </div>
+                <button onClick={() => setSettlingPosBill(null)} className="text-slate-400 hover:text-white">✕</button>
+              </div>
+
+              <div className="space-y-3 text-xs">
+                {/* ແຍກຍອດຂາຍຈິງ vs ຊິມເອງ/ແຖມ */}
+                <div className="border border-slate-200 dark:border-neutral-800 rounded-2xl p-3 bg-slate-50 dark:bg-[#1c1c1c] space-y-3">
+                  <span className="label-xs block text-slate-700 dark:text-neutral-300">ກວດສອບ: ຂາຍຈິງ vs ຊິມເອງ / ແຖມ</span>
+                  {settlingItems.map((it: any, idx: number) => (
+                    <div key={idx} className="space-y-1.5 pt-2 border-t border-slate-200 dark:border-neutral-800 first:border-0 first:pt-0">
+                      <div className="flex justify-between font-bold text-slate-800 dark:text-white">
+                        <span>{it.menuName}</span>
+                        <span className="font-mono text-slate-400">@{Number(it.sellingPrice).toLocaleString()} ₭</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="p-2 bg-white dark:bg-[#141414] rounded-xl flex items-center justify-between border border-slate-200 dark:border-neutral-800">
+                          <span className="text-emerald-500 font-bold text-[11px] flex items-center gap-1">
+                            <DollarSign className="w-3 h-3" /> ຂາຍຈິງ:
+                          </span>
+                          <input
+                            type="number"
+                            min="0"
+                            value={it.actualSoldQty}
+                            onChange={e => {
+                              const updated = [...settlingItems];
+                              updated[idx].actualSoldQty = Number(e.target.value) || 0;
+                              setSettlingItems(updated);
+                            }}
+                            className="w-14 crystal-input !py-0.5 text-center font-mono text-emerald-500 font-bold"
+                          />
+                        </div>
+                        <div className="p-2 bg-white dark:bg-[#141414] rounded-xl flex items-center justify-between border border-slate-200 dark:border-neutral-800">
+                          <span className="text-amber-500 font-bold text-[11px] flex items-center gap-1">
+                            <Gift className="w-3 h-3" /> ແຖມ/ຊິມ:
+                          </span>
+                          <input
+                            type="number"
+                            min="0"
+                            value={it.sampleQty}
+                            onChange={e => {
+                              const updated = [...settlingItems];
+                              updated[idx].sampleQty = Number(e.target.value) || 0;
+                              setSettlingItems(updated);
+                            }}
+                            className="w-14 crystal-input !py-0.5 text-center font-mono text-amber-500 font-bold"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* ວິທີຊຳລະ & ສະລິບ (Ctrl+V) */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="label-xs block mb-1">ຊ່ອງທາງຊຳລະ</label>
+                    <select
+                      value={settlingPaymentMethod}
+                      onChange={e => setSettlingPaymentMethod(e.target.value as any)}
+                      className="crystal-input w-full font-bold"
+                    >
+                      <option value="onepay">BCEL One (ໂອນ)</option>
+                      <option value="cash">ເງິນສົດ (Cash)</option>
+                      <option value="ldb">LDB Trust</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="label-xs block mb-1">ສະລິບໂອນ (Ctrl+V ວາງໄດ້)</label>
+                    <div className="border border-dashed border-slate-300 dark:border-neutral-700 rounded-xl p-2 bg-slate-50 dark:bg-[#1c1c1c] text-center flex items-center justify-center min-h-[42px] relative">
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (file) setSettlingSlip(await compressImage(file));
+                        }} 
+                        className="absolute inset-0 opacity-0 cursor-pointer w-full" 
+                      />
+                      {settlingSlip ? (
+                        <div className="flex items-center gap-2">
+                          <img src={settlingSlip} alt="Slip" className="w-8 h-8 rounded-lg object-cover" />
+                          <span className="text-emerald-500 font-bold text-[10px]">✓ ແນບສະລິບແລ້ວ</span>
+                        </div>
+                      ) : (
+                        <span className="text-slate-400 text-[10px] flex items-center gap-1">
+                          <Upload className="w-3 h-3" /> ຄລິກ ຫຼື ກົດ Ctrl+V
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Real Revenue Highlight */}
+                {(() => {
+                  const finalRevenue = settlingItems.reduce((sum, it) => sum + (Number(it.actualSoldQty || 0) * Number(it.sellingPrice || 0)), 0);
+                  return (
+                    <div className="p-4 bg-slate-100 dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 rounded-2xl flex justify-between items-center">
+                      <div>
+                        <span className="text-xs text-slate-500 font-bold block">ຍອດຂາຍຕົວຈິງທີ່ຈະເຂົ້າ Dashboard:</span>
+                        <span className="text-[10px] text-slate-400">(ຄິດໄລ່ສະເພາະຈຳນວນທີ່ຂາຍໄດ້ຈິງ • ຕັດຍອດແຖມອອກ)</span>
+                      </div>
+                      <span className="font-mono text-2xl font-black text-emerald-500">
+                        {finalRevenue.toLocaleString()} ₭
+                      </span>
+                    </div>
+                  );
+                })()}
+
+                <div className="pt-2 flex justify-end gap-2 border-t border-slate-100 dark:border-neutral-800">
+                  <button type="button" onClick={() => setSettlingPosBill(null)} className="px-4 py-2 rounded-xl border text-xs font-bold text-slate-400">
+                    ຍົກເລີກ
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isSettling}
+                    onClick={handleConfirmSettleBill}
+                    className="crystal-button !bg-emerald-600 hover:!bg-emerald-700 !text-white flex items-center gap-2 cursor-pointer shadow-md disabled:opacity-40"
+                  >
+                    <CheckCircle className="w-4 h-4 text-white" />
+                    <span>{isSettling ? 'ກຳລັງເຄຍ...' : 'ຢືນຢັນເຄຍບິນ & ເພີ່ມຍອດຂາຍ'}</span>
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* 🌟 VIRTUAL POS RECEIPT MODAL */}
       <AnimatePresence>
@@ -1081,12 +1542,12 @@ export default function Inventory() {
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-black text-slate-900 truncate leading-tight">{it.menuName}</p>
                       <p className="text-[10px] text-slate-500 font-mono">
-                        {it.soldQty} × {Number(it.sellingPrice).toLocaleString()}
+                        {(it.actualSoldQty !== undefined ? it.actualSoldQty : (it.soldQty || it.producedQty))} × {Number(it.sellingPrice).toLocaleString()}
                       </p>
                     </div>
 
                     <span className="text-xs font-mono font-black text-slate-900 shrink-0">
-                      {it.lineRevenue.toLocaleString()} ₭
+                      {((it.actualSoldQty !== undefined ? it.actualSoldQty : (it.soldQty || it.producedQty)) * it.sellingPrice).toLocaleString()} ₭
                     </span>
                   </div>
                 ))}
@@ -1100,7 +1561,7 @@ export default function Inventory() {
                 </div>
                 <div className="flex justify-between text-base font-black text-slate-900 pt-1.5 border-t border-slate-300">
                   <span>ຍອດລວມ (TOTAL):</span>
-                  <span>{Number(activeViewingBill.totalRevenue).toLocaleString()} ₭</span>
+                  <span>{Number(activeViewingBill.actualRevenue || activeViewingBill.totalRevenue).toLocaleString()} ₭</span>
                 </div>
               </div>
 
