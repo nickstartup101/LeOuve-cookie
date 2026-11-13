@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { auth, db, handleFirestoreError, OperationType } from '../firebase';
 import { 
   collection, addDoc, onSnapshot, query, orderBy, 
@@ -7,7 +7,7 @@ import {
 import { 
   Plus, Trash2, Edit2, Save, X, Search, 
   Receipt, Upload, Eye, Calculator, Package, ImageIcon, 
-  Building2, Check, ZoomIn, Layers
+  Building2, Check, ZoomIn, Layers, ChevronDown
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useTranslation } from 'react-i18next';
@@ -41,6 +41,139 @@ const compressImage = (file: File): Promise<string> => {
     };
     reader.onerror = reject;
   });
+};
+
+// 🌟 Searchable Select Component ສຳລັບເລືອກສິນຄ້າໃນ Suppliers
+const SearchableProductSelect = ({
+  products,
+  value,
+  onChange,
+  placeholder = '-- ຄົ້ນຫາ & ເລືອກສິນຄ້າ --'
+}: {
+  products: any[];
+  value: string;
+  onChange: (id: string) => void;
+  placeholder?: string;
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [queryText, setQueryText] = useState('');
+  const ref = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const selectedProd = products.find(p => p.id === value);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    if (isOpen) {
+      setTimeout(() => inputRef.current?.focus(), 50);
+    } else {
+      setQueryText('');
+    }
+  }, [isOpen]);
+
+  const filtered = products.filter(p => {
+    if (!queryText.trim()) return true;
+    const q = queryText.toLowerCase().trim();
+    const nameMatch = (p.name || '').toLowerCase().includes(q);
+    const catMatch = (p.categoryType || 'COGS').toLowerCase().includes(q);
+    const unitMatch = (p.unit || '').toLowerCase().includes(q);
+    return nameMatch || catMatch || unitMatch;
+  });
+
+  return (
+    <div ref={ref} className="relative w-full text-xs">
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="crystal-input w-full font-bold !py-2 text-xs flex items-center justify-between text-left h-10 cursor-pointer"
+      >
+        <span className="truncate flex-1 mr-2 text-slate-800 dark:text-white">
+          {selectedProd ? (
+            <>
+              <span className={`text-[9px] px-1.5 py-0.5 rounded font-black mr-1.5 uppercase ${
+                selectedProd.categoryType === 'EQUIPMENT' 
+                  ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' 
+                  : 'bg-amber-500/10 text-amber-500 border border-amber-500/20'
+              }`}>
+                {selectedProd.categoryType || 'COGS'}
+              </span>
+              {selectedProd.name} ({selectedProd.unit})
+            </>
+          ) : (
+            <span className="text-slate-400 font-normal">{placeholder}</span>
+          )}
+        </span>
+        <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform ${isOpen ? 'rotate-180 text-sky-500' : ''}`} />
+      </button>
+
+      {isOpen && (
+        <div className="absolute top-full left-0 z-50 w-full mt-1 bg-white dark:bg-[#141414] border border-slate-200 dark:border-neutral-800 rounded-2xl shadow-2xl overflow-hidden">
+          <div className="p-2 border-b border-slate-100 dark:border-neutral-800 bg-slate-50 dark:bg-[#1c1c1c] flex items-center gap-2">
+            <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+            <input
+              ref={inputRef}
+              type="text"
+              value={queryText}
+              onChange={e => setQueryText(e.target.value)}
+              placeholder="ພິມຊື່ສິນຄ້າ, ໝວດ ຫຼື ຫົວໜ່ວຍ..."
+              className="w-full bg-transparent text-xs text-slate-800 dark:text-white focus:outline-none font-medium"
+            />
+            {queryText && (
+              <button type="button" onClick={() => setQueryText('')} className="text-slate-400 hover:text-white">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          <div className="max-h-56 overflow-y-auto divide-y divide-slate-100 dark:divide-neutral-850 p-1">
+            {filtered.length === 0 ? (
+              <div className="py-5 text-center text-slate-400 text-xs">ບໍ່ພົບສິນຄ້າ "{queryText}"</div>
+            ) : (
+              filtered.map(p => {
+                const isSelected = p.id === value;
+                return (
+                  <div
+                    key={p.id}
+                    onClick={() => {
+                      onChange(p.id);
+                      setIsOpen(false);
+                    }}
+                    className={`px-3 py-2 rounded-xl flex items-center justify-between cursor-pointer transition-colors ${
+                      isSelected 
+                        ? 'bg-sky-500/10 text-sky-500 font-bold' 
+                        : 'hover:bg-slate-100 dark:hover:bg-neutral-800 text-slate-700 dark:text-neutral-200'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 truncate">
+                      <span className={`text-[8px] px-1.5 py-0.5 rounded font-black font-mono shrink-0 uppercase ${
+                        p.categoryType === 'EQUIPMENT' 
+                          ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' 
+                          : 'bg-amber-500/10 text-amber-500 border border-amber-500/20'
+                      }`}>
+                        {p.categoryType || 'COGS'}
+                      </span>
+                      <span className="truncate">{p.name}</span>
+                      <span className="text-[10px] text-slate-400 font-mono">({p.unit})</span>
+                    </div>
+                    {isSelected && <Check className="w-3.5 h-3.5 text-sky-500 shrink-0" />}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 };
 
 interface BillItemRow {
@@ -531,7 +664,7 @@ export default function Suppliers() {
 
           </div>
 
-          {/* Line items list */}
+          {/* Line items list with SEARCHABLE PRODUCT SELECT */}
           <div className="space-y-3">
             <div className="flex justify-between items-center">
               <h4 className="text-xs font-serif uppercase tracking-wider text-slate-800 dark:text-white">
@@ -578,12 +711,12 @@ export default function Suppliers() {
                         )}
                       </div>
 
-                      {/* Dropdown Select Product */}
-                      <div className="flex-1 min-w-[200px]">
-                        <select
+                      {/* 🌟 ປ່ຽນເປັນ Searchable Dropdown ພິມຄົ້ນຫາສິນຄ້າໄດ້ທັນທີ */}
+                      <div className="flex-1 min-w-[220px]">
+                        <SearchableProductSelect
+                          products={products}
                           value={item.productId}
-                          onChange={e => {
-                            const pId = e.target.value;
+                          onChange={(pId) => {
                             const pr = products.find(p => p.id === pId);
                             setBillItems(prev => prev.map((it, i) => i === idx ? { 
                               ...it, 
@@ -592,15 +725,7 @@ export default function Suppliers() {
                               quantityPerUnit: pr?.packSize || 1000 
                             } : it));
                           }}
-                          className="crystal-input w-full font-bold !py-2 text-xs cursor-pointer h-10"
-                        >
-                          <option value="">-- ເລືອກສິນຄ້າ --</option>
-                          {products.map(p => (
-                            <option key={p.id} value={p.id}>
-                              [{p.categoryType || 'COGS'}] {p.name} ({p.unit})
-                            </option>
-                          ))}
-                        </select>
+                        />
                       </div>
 
                       {/* Price Mode */}
@@ -731,7 +856,7 @@ export default function Suppliers() {
             <button
               type="submit"
               disabled={saveLoading}
-              className="crystal-button !py-3 !px-8 flex items-center gap-2"
+              className="crystal-button !py-3 !px-8 flex items-center gap-2 cursor-pointer"
             >
               <Save className="w-4 h-4" />
               <span>{saveLoading ? 'ກຳລັງບັນທຶກ...' : 'ບັນທຶກໃບບິນ (ທຸກລາຍການ)'}</span>
@@ -1144,7 +1269,7 @@ export default function Suppliers() {
         </div>
       )}
 
-      {/* 📝 Modal: Edit Quote (ປັບປຸງຄົບຖ້ວນທຸກແຖວ ບໍ່ມີຂາດ) */}
+      {/* 📝 Modal: Edit Quote */}
       {isEditModalOpen && editingItem && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm" onClick={() => setIsEditModalOpen(false)}>
           <div className="bg-white dark:bg-[#141414] rounded-3xl p-6 border border-slate-200 dark:border-neutral-800 max-w-lg w-full space-y-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
@@ -1161,10 +1286,10 @@ export default function Suppliers() {
             <form onSubmit={handleSaveEditedItem} className="space-y-4">
               <div>
                 <label className="label-xs block mb-1">ສິນຄ້າ / ວັດຖຸດິບ</label>
-                <select
+                <SearchableProductSelect
+                  products={products}
                   value={editingItem.productId}
-                  onChange={e => {
-                    const pId = e.target.value;
+                  onChange={(pId) => {
                     const pr = products.find(p => p.id === pId);
                     setEditingItem({ 
                       ...editingItem, 
@@ -1174,12 +1299,7 @@ export default function Suppliers() {
                       categoryType: pr?.categoryType || 'COGS'
                     });
                   }}
-                  className="crystal-input w-full font-bold cursor-pointer"
-                >
-                  {products.map(p => (
-                    <option key={p.id} value={p.id}>[{p.categoryType || 'COGS'}] {p.name}</option>
-                  ))}
-                </select>
+                />
               </div>
 
               <div>
@@ -1389,8 +1509,8 @@ export default function Suppliers() {
               </div>
 
               <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-neutral-800">
-                <button type="button" onClick={() => setIsEditModalOpen(false)} className="px-4 py-2 rounded-xl border text-xs font-bold text-slate-400">ຍົກເລີກ</button>
-                <button type="submit" disabled={saveLoading} className="crystal-button">
+                <button type="button" onClick={() => setIsEditModalOpen(false)} className="px-4 py-2 rounded-xl border text-xs font-bold text-slate-400 cursor-pointer">ຍົກເລີກ</button>
+                <button type="submit" disabled={saveLoading} className="crystal-button cursor-pointer">
                   {saveLoading ? 'Saving...' : 'ບັນທຶກການແກ້ໄຂ'}
                 </button>
               </div>
@@ -1504,7 +1624,7 @@ export default function Suppliers() {
                       <button type="button" onClick={() => setNewProductForm(prev => ({ ...prev, productImage: '' }))} className="text-rose-500 p-1">✕</button>
                     </div>
                   ) : (
-                    <span className="text-xs text-slate-400 mx-auto flex items-center gap-1.5"><ImageIcon className="w-4 h-4" /> ຄລິກເລືອກຮູບ ຫຼື ກົດ Ctrl+V</span>
+                    <span className="text-xs text-slate-400 mx-auto flex items-center gap-1.5"><ImageIcon className="w-3.5 h-3.5" /> ຄລິກເລືອກຮູບ ຫຼື ກົດ Ctrl+V</span>
                   )}
                 </div>
               </div>
