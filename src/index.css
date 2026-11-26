@@ -4,29 +4,32 @@
 
 @layer base {
   body {
-    @apply font-sans antialiased bg-slate-50 text-slate-800 dark:bg-[#0a0a0a] dark:text-neutral-100;
+    @apply font-sans antialiased bg-[#faf9f6] text-[#1a1a1a];
+  }
+
+  svg.lucide {
+    stroke-width: 1.75;
   }
 }
 
-/* Custom UI Cards - True Neutral Black in Dark Mode */
 .glass-card {
-  @apply bg-white dark:bg-[#141414] rounded-3xl border border-slate-200/80 dark:border-neutral-800/80 shadow-sm backdrop-blur-md;
+  @apply bg-white rounded-3xl border border-[#e8e5e0] shadow-sm backdrop-blur-md;
 }
 
 .high-density-card {
-  @apply bg-white dark:bg-[#141414] rounded-3xl border border-slate-200/80 dark:border-neutral-800/80 shadow-sm;
+  @apply bg-white rounded-3xl border border-[#e8e5e0] shadow-sm;
 }
 
 .label-xs {
-  @apply text-[10px] font-black uppercase tracking-wider text-slate-400 dark:text-neutral-500;
+  @apply text-[10px] font-black uppercase tracking-wider text-[#777777];
 }
 
 .crystal-input {
-  @apply px-4 py-2.5 rounded-xl border border-slate-200 dark:border-neutral-800 bg-slate-50 dark:bg-[#1c1c1c] text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#052659]/30 dark:focus:ring-white/20 transition-all font-sans text-xs;
+  @apply px-4 py-2.5 rounded-xl border border-[#e8e5e0] bg-white text-[#1a1a1a] outline-none focus:ring-2 focus:ring-[#4f0303]/20 transition-all font-sans text-xs;
 }
 
 .crystal-button {
-  @apply px-5 py-2.5 rounded-xl bg-[#052659] hover:bg-[#0c3a80] dark:bg-white dark:hover:bg-neutral-200 dark:text-neutral-950 text-white font-bold text-xs uppercase tracking-wider transition-all shadow-sm active:scale-95 cursor-pointer;
+  @apply px-5 py-2.5 rounded-xl bg-[#4f0303] hover:bg-[#680404] active:bg-[#380202] text-white font-bold text-xs uppercase tracking-wider transition-all shadow-sm active:scale-95 cursor-pointer;
 }
 
 .mask-fade-vertical {

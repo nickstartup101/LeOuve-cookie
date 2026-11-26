@@ -1,14 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  LayoutDashboard, 
+import {
+  LayoutDashboard,
   DollarSign,
-  Layers, 
-  Truck, 
-  ShoppingCart, 
+  Layers,
+  Truck,
+  ShoppingCart,
   Settings as SettingsIcon,
   LogOut,
-  Moon,
-  Sun,
   Menu,
   X,
   Languages
@@ -30,7 +28,6 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'finance' | 'inventory' | 'suppliers' | 'planner' | 'settings'>('dashboard');
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
-  const [isDarkMode, setIsDarkMode] = useState(false);
   const [userSettings, setUserSettings] = useState<any>(null);
   const [appConfig, setAppConfig] = useState<any>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -54,14 +51,6 @@ export default function App() {
     return () => { unsubUserSettings(); unsubAppConfig(); };
   }, [user]);
 
-  useEffect(() => {
-    if (isDarkMode) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-  }, [isDarkMode]);
-
   const toggleLanguage = () => {
     const nextLang = i18n.language === 'la' ? 'en' : 'la';
     i18n.changeLanguage(nextLang);
@@ -69,35 +58,35 @@ export default function App() {
 
   if (authLoading) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 dark:bg-[#0a0a0a] text-slate-800 dark:text-white font-sans gap-3">
-        <div className="w-8 h-8 border-2 border-neutral-300 dark:border-neutral-700 border-t-[#052659] dark:border-t-white rounded-full animate-spin"></div>
-        <p className="text-[10px] font-light uppercase tracking-[0.3em] text-neutral-400">Loading Le Ouve...</p>
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[#faf9f6] text-[#1a1a1a] font-sans gap-3">
+        <div className="w-8 h-8 border-2 border-[#e8e5e0] border-t-[#4f0303] rounded-full animate-spin"></div>
+        <p className="text-[10px] font-light uppercase tracking-[0.3em] text-[#777777]">Loading Le Ouve...</p>
       </div>
     );
   }
 
   if (!user) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-100 dark:bg-[#0a0a0a] p-6">
-        <div className="w-full max-w-md bg-white dark:bg-[#141414] rounded-[2.5rem] p-12 shadow-2xl border border-slate-200/80 dark:border-neutral-800 text-center space-y-8 animate-in fade-in zoom-in-95 duration-300">
+      <div className="min-h-screen flex items-center justify-center bg-[#faf9f6] p-6">
+        <div className="w-full max-w-md bg-white rounded-[2.5rem] p-12 shadow-xl border border-[#e8e5e0] text-center space-y-8 animate-in fade-in zoom-in-95 duration-300">
           <div className="flex flex-col items-center justify-center select-none pt-2">
-            <h1 className="font-serif text-5xl md:text-6xl text-neutral-900 dark:text-white tracking-tight leading-none">
+            <h1 className="font-serif text-5xl md:text-6xl text-[#4f0303] tracking-tight leading-none">
               Le Ouve
             </h1>
-            <span className="font-sans text-[9px] font-light tracking-[0.45em] uppercase text-neutral-400 dark:text-neutral-500 mt-3 leading-none">
+            <span className="font-sans text-[9px] font-light tracking-[0.45em] uppercase text-[#777777] mt-3 leading-none">
               workspace estd 2026
             </span>
           </div>
 
-          <div className="w-12 h-[1px] bg-neutral-200 dark:bg-neutral-800 mx-auto"></div>
+          <div className="w-12 h-[1px] bg-[#e8e5e0] mx-auto"></div>
 
-          <p className="font-sans text-xs font-light text-slate-500 dark:text-neutral-400 leading-relaxed max-w-xs mx-auto">
+          <p className="font-sans text-xs font-light text-[#666666] leading-relaxed max-w-xs mx-auto">
             ລະບົບຄຸ້ມຄອງຄັງສາງ, ຕົ້ນທຶນສູດເຄື່ອງດື່ມ, ບັນຊີການເງິນ & ໃບບິນຈັດຊື້ອັດຕະໂນມັດ
           </p>
 
           <button
             onClick={() => signInWithPopup(auth, googleProvider)}
-            className="w-full py-4 bg-[#052659] hover:bg-[#0c3a80] dark:bg-white dark:hover:bg-neutral-200 dark:text-neutral-950 text-white rounded-2xl font-sans font-medium text-xs uppercase tracking-[0.2em] shadow-xl transition-all active:scale-95 cursor-pointer"
+            className="w-full py-4 bg-[#4f0303] hover:bg-[#680404] active:bg-[#380202] text-white rounded-2xl font-sans font-medium text-xs uppercase tracking-[0.2em] shadow-lg transition-all active:scale-95 cursor-pointer"
           >
             Sign in with Google
           </button>
@@ -116,18 +105,17 @@ export default function App() {
   ];
 
   return (
-    <div className="min-h-screen flex bg-slate-50 dark:bg-[#0a0a0a] text-slate-800 dark:text-neutral-100 font-sans transition-colors duration-200">
-      
-      {/* 🧭 SIDEBAR: ສີຟ້າເຂັ້ມໃນ Light mode / ສີດຳເລິກ OLED ໃນ Night mode */}
-      <aside className="hidden lg:flex w-64 bg-[#052659] dark:bg-[#0c0c0c] text-white flex-col justify-between fixed inset-y-0 left-0 z-40 border-r border-[#0c3a80]/30 dark:border-neutral-800/80 shadow-2xl select-none transition-colors duration-300">
-        
+    <div className="min-h-screen flex bg-[#faf9f6] text-[#1a1a1a] font-sans transition-colors duration-200">
+
+    <aside className="hidden lg:flex w-64 bg-white text-[#1a1a1a] flex-col justify-between fixed inset-y-0 left-0 z-40 border-r border-[#e8e5e0] shadow-sm select-none transition-colors duration-300">
+
         {/* Brand Header */}
-        <div className="p-7 border-b border-white/10 dark:border-neutral-800">
+      <div className="p-7 border-b border-[#e8e5e0]">
           <div className="cursor-pointer" onClick={() => setActiveTab('dashboard')}>
-            <h1 className="font-serif text-3xl text-white tracking-tight leading-none">
+          <h1 className="font-serif text-3xl text-[#4f0303] tracking-tight leading-none">
               {appConfig?.shopName || 'Le Ouve'}
             </h1>
-            <p className="font-sans text-[8px] font-light tracking-[0.35em] uppercase text-white/50 dark:text-neutral-500 mt-1.5 leading-none">
+          <p className="font-sans text-[8px] font-light tracking-[0.35em] uppercase text-[#777777] mt-1.5 leading-none">
               workspace estd 2026
             </p>
           </div>
@@ -142,9 +130,9 @@ export default function App() {
                 key={item.key}
                 onClick={() => setActiveTab(item.key as any)}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs uppercase tracking-wider transition-all cursor-pointer font-sans ${
-                  isActive 
-                    ? 'bg-white text-[#052659] dark:bg-white dark:text-neutral-950 font-bold shadow-lg shadow-black/20 translate-x-1' 
-                    : 'text-white/70 dark:text-neutral-400 hover:text-white hover:bg-white/10 dark:hover:bg-neutral-900 font-light'
+                  isActive
+                    ? 'bg-[#4f0303] text-white font-bold shadow-md shadow-[#4f0303]/15 translate-x-1'
+                    : 'text-[#666666] hover:text-[#4f0303] hover:bg-[#680404]/5 font-medium'
                 }`}
               >
                 <item.icon className="w-4 h-4 shrink-0" />
@@ -154,39 +142,28 @@ export default function App() {
           })}
         </nav>
 
-        {/* Sidebar Footer: Language Switcher, Night Mode & Logout */}
-        <div className="p-4 border-t border-white/10 dark:border-neutral-800 space-y-3">
-          
-          {/* 🌐 ປຸ່ມປ່ຽນພາສາ LA | EN & Dark Mode Toggle */}
-          <div className="grid grid-cols-2 gap-2">
+        <div className="p-4 border-t border-[#e8e5e0] space-y-3">
+
+          <div className="grid grid-cols-1 gap-2">
             <button
               onClick={toggleLanguage}
-              className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-white/10 dark:bg-neutral-900 hover:bg-white/20 text-white text-xs font-bold transition-all cursor-pointer border border-white/5 dark:border-neutral-800"
+              className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-[#f4f3f0] hover:bg-[#e8e5e0] text-[#4f0303] text-xs font-bold transition-all cursor-pointer border border-[#e8e5e0]"
               title="Change Language"
             >
-              <Languages className="w-3.5 h-3.5 text-sky-400" />
+              <Languages className="w-3.5 h-3.5" />
               <span>{i18n.language === 'la' ? 'ລາວ' : 'EN'}</span>
-            </button>
-
-            <button
-              onClick={() => setIsDarkMode(!isDarkMode)}
-              className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-white/10 dark:bg-neutral-900 hover:bg-white/20 text-white text-xs font-bold transition-all cursor-pointer border border-white/5 dark:border-neutral-800"
-              title="Toggle Night Mode"
-            >
-              {isDarkMode ? <Sun className="w-3.5 h-3.5 text-amber-300" /> : <Moon className="w-3.5 h-3.5 text-sky-300" />}
-              <span>{isDarkMode ? 'Light' : 'Dark'}</span>
             </button>
           </div>
 
           {/* User Profile */}
-          <div className="flex items-center justify-between p-2.5 rounded-2xl bg-black/20 dark:bg-neutral-900/60 border border-white/5 dark:border-neutral-800">
+          <div className="flex items-center justify-between p-2.5 rounded-2xl bg-[#f4f3f0] border border-[#e8e5e0]">
             <div className="truncate pr-2">
-              <p className="text-xs font-bold text-white truncate leading-none">{user.displayName || 'Admin'}</p>
-              <p className="text-[9px] text-white/40 dark:text-neutral-500 truncate mt-1 font-light">{user.email}</p>
+              <p className="text-xs font-bold text-[#1a1a1a] truncate leading-none">{user.displayName || 'Admin'}</p>
+              <p className="text-[9px] text-[#777777] truncate mt-1 font-light">{user.email}</p>
             </div>
             <button
               onClick={() => signOut(auth)}
-              className="p-1.5 text-rose-400 hover:bg-rose-500/20 rounded-xl transition-colors cursor-pointer"
+              className="p-1.5 text-[#4f0303] hover:bg-[#680404]/10 rounded-xl transition-colors cursor-pointer"
               title="Sign Out"
             >
               <LogOut className="w-4 h-4" />
@@ -195,40 +172,35 @@ export default function App() {
         </div>
       </aside>
 
-      {/* 📱 Mobile Top Header */}
-      <div className="lg:hidden fixed top-0 inset-x-0 z-40 bg-[#052659] dark:bg-[#0c0c0c] text-white px-5 py-3.5 flex items-center justify-between shadow-md border-b border-white/10 dark:border-neutral-800">
+      <div className="lg:hidden fixed top-0 inset-x-0 z-40 bg-white text-[#1a1a1a] px-5 py-3.5 flex items-center justify-between shadow-sm border-b border-[#e8e5e0]">
         <div>
-          <h1 className="font-serif text-2xl text-white tracking-tight leading-none">Le Ouve</h1>
-          <p className="text-[7.5px] font-light tracking-[0.3em] uppercase text-white/50 mt-1">workspace estd 2026</p>
+          <h1 className="font-serif text-2xl text-[#4f0303] tracking-tight leading-none">Le Ouve</h1>
+          <p className="text-[7.5px] font-light tracking-[0.3em] uppercase text-[#777777] mt-1">workspace estd 2026</p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={toggleLanguage} className="p-2 rounded-xl bg-white/10 text-xs font-bold">
+          <button onClick={toggleLanguage} className="p-2 rounded-xl bg-[#f4f3f0] text-[#4f0303] text-xs font-bold">
             {i18n.language === 'la' ? 'LA' : 'EN'}
           </button>
-          <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2 rounded-xl bg-white/10 text-white">
-            {isDarkMode ? <Sun className="w-3.5 h-3.5 text-amber-300" /> : <Moon className="w-3.5 h-3.5" />}
-          </button>
-          <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="p-2 rounded-xl bg-white/10 text-white">
+          <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="p-2 rounded-xl bg-[#f4f3f0] text-[#4f0303]">
             {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
         </div>
       </div>
 
-      {/* Mobile Drawer Menu */}
       {isMobileMenuOpen && (
-        <div className="lg:hidden fixed inset-0 z-50 bg-black/75 backdrop-blur-sm" onClick={() => setIsMobileMenuOpen(false)}>
-          <div className="w-72 bg-[#052659] dark:bg-[#0c0c0c] h-full p-6 text-white flex flex-col justify-between" onClick={e => e.stopPropagation()}>
+        <div className="lg:hidden fixed inset-0 z-50 bg-[#f4f3f0]/35 backdrop-blur-sm" onClick={() => setIsMobileMenuOpen(false)}>
+          <div className="w-72 bg-white h-full p-6 text-[#1a1a1a] flex flex-col justify-between border-r border-[#e8e5e0]" onClick={e => e.stopPropagation()}>
             <div className="space-y-6">
-              <div className="border-b border-white/10 pb-4">
-                <h2 className="font-serif text-3xl">Le Ouve</h2>
-                <p className="text-[8px] uppercase tracking-[0.35em] text-white/50 mt-1">workspace estd 2026</p>
+              <div className="border-b border-[#e8e5e0] pb-4">
+                <h2 className="font-serif text-3xl text-[#4f0303]">Le Ouve</h2>
+                <p className="text-[8px] uppercase tracking-[0.35em] text-[#777777] mt-1">workspace estd 2026</p>
               </div>
               <div className="space-y-1">
                 {navItems.map(item => (
                   <button
                     key={item.key}
                     onClick={() => { setActiveTab(item.key as any); setIsMobileMenuOpen(false); }}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs uppercase tracking-wider ${activeTab === item.key ? 'bg-white text-[#052659] font-bold' : 'text-white/70'}`}
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs uppercase tracking-wider ${activeTab === item.key ? 'bg-[#4f0303] text-white font-bold' : 'text-[#666666] hover:bg-[#680404]/5 hover:text-[#4f0303]'}`}
                   >
                     <item.icon className="w-4 h-4" />
                     <span>{item.label}</span>
@@ -236,7 +208,7 @@ export default function App() {
                 ))}
               </div>
             </div>
-            <button onClick={() => signOut(auth)} className="w-full py-3 rounded-xl bg-rose-500/20 text-rose-300 text-xs font-bold uppercase flex items-center justify-center gap-2">
+            <button onClick={() => signOut(auth)} className="w-full py-3 rounded-xl bg-[#4f0303]/10 text-[#4f0303] text-xs font-bold uppercase flex items-center justify-center gap-2">
               <LogOut className="w-4 h-4" />
               <span>Log Out</span>
             </button>
@@ -244,7 +216,6 @@ export default function App() {
         </div>
       )}
 
-      {/* 💻 Main Content */}
       <main className="flex-1 lg:pl-64 w-full min-w-0 pt-16 lg:pt-0">
         <div className="max-w-7xl mx-auto p-5 md:p-8">
           {activeTab === 'dashboard' && <Dashboard userSettings={userSettings} user={user} />}
@@ -253,13 +224,11 @@ export default function App() {
           {activeTab === 'suppliers' && <Suppliers />}
           {activeTab === 'planner' && <ProcurementPlanner />}
           {activeTab === 'settings' && (
-            <Settings 
-              user={user} 
-              isDarkMode={isDarkMode} 
-              setIsDarkMode={setIsDarkMode} 
-              userSettings={userSettings} 
-              isSuperAdmin={true} 
-              appConfig={appConfig} 
+            <Settings
+              user={user}
+              userSettings={userSettings}
+              isSuperAdmin={true}
+              appConfig={appConfig}
             />
           )}
         </div>

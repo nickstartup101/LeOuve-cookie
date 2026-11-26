@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { auth, db, handleFirestoreError, OperationType } from '../firebase';
-import { 
-  collection, addDoc, onSnapshot, query, orderBy, 
-  deleteDoc, doc, updateDoc, serverTimestamp, getDocs, where 
+import {
+  collection, addDoc, onSnapshot, query, orderBy,
+  deleteDoc, doc, updateDoc, serverTimestamp, getDocs, where
 } from 'firebase/firestore';
-import { 
-  Plus, Trash2, Edit2, Save, X, Search, 
-  Receipt, Upload, Eye, Calculator, Package, ImageIcon, 
-  Building2, Check, ZoomIn, Layers, ChevronDown
+import {
+  Plus, Trash2, Edit2, Save, X, Search,
+  Receipt, Upload, Eye, Calculator, Package, ImageIcon,
+  Building2, Check, CheckCircle2, ZoomIn, Layers, ChevronDown
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useTranslation } from 'react-i18next';
@@ -43,7 +43,7 @@ const compressImage = (file: File): Promise<string> => {
   });
 };
 
-// 🌟 Searchable Select Component ສຳລັບເລືອກສິນຄ້າໃນ Suppliers
+//  Searchable Select Component ສຳລັບເລືອກສິນຄ້າໃນ Suppliers
 const SearchableProductSelect = ({
   products,
   value,
@@ -96,47 +96,47 @@ const SearchableProductSelect = ({
         onClick={() => setIsOpen(!isOpen)}
         className="crystal-input w-full font-bold !py-2 text-xs flex items-center justify-between text-left h-10 cursor-pointer"
       >
-        <span className="truncate flex-1 mr-2 text-slate-800 dark:text-white">
+        <span className="truncate flex-1 mr-2 text-[#1a1a1a] ">
           {selectedProd ? (
             <>
               <span className={`text-[9px] px-1.5 py-0.5 rounded font-black mr-1.5 uppercase ${
-                selectedProd.categoryType === 'EQUIPMENT' 
-                  ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' 
-                  : 'bg-amber-500/10 text-amber-500 border border-amber-500/20'
+                selectedProd.categoryType === 'EQUIPMENT'
+                  ? 'bg-[#4f0303]/10 text-[#4f0303] border border-[#4f0303]/20'
+                  : 'bg-[#4f0303]/10 text-[#4f0303] border border-[#4f0303]/20'
               }`}>
                 {selectedProd.categoryType || 'COGS'}
               </span>
               {selectedProd.name} ({selectedProd.unit})
             </>
           ) : (
-            <span className="text-slate-400 font-normal">{placeholder}</span>
+            <span className="text-[#777777] font-normal">{placeholder}</span>
           )}
         </span>
-        <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform ${isOpen ? 'rotate-180 text-sky-500' : ''}`} />
+        <ChevronDown className={`w-3.5 h-3.5 text-[#777777] transition-transform ${isOpen ? 'rotate-180 text-[#4f0303]' : ''}`} />
       </button>
 
       {isOpen && (
-        <div className="absolute top-full left-0 z-50 w-full mt-1 bg-white dark:bg-[#141414] border border-slate-200 dark:border-neutral-800 rounded-2xl shadow-2xl overflow-hidden">
-          <div className="p-2 border-b border-slate-100 dark:border-neutral-800 bg-slate-50 dark:bg-[#1c1c1c] flex items-center gap-2">
-            <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+        <div className="absolute top-full left-0 z-50 w-full mt-1 bg-white  border border-[#e8e5e0]  rounded-2xl shadow-2xl overflow-hidden">
+          <div className="p-2 border-b border-[#e8e5e0]  bg-[#faf9f6]  flex items-center gap-2">
+            <Search className="w-3.5 h-3.5 text-[#777777] shrink-0" />
             <input
               ref={inputRef}
               type="text"
               value={queryText}
               onChange={e => setQueryText(e.target.value)}
               placeholder="ພິມຊື່ສິນຄ້າ, ໝວດ ຫຼື ຫົວໜ່ວຍ..."
-              className="w-full bg-transparent text-xs text-slate-800 dark:text-white focus:outline-none font-medium"
+              className="w-full bg-transparent text-xs text-[#1a1a1a]  focus:outline-none font-medium"
             />
             {queryText && (
-              <button type="button" onClick={() => setQueryText('')} className="text-slate-400 hover:text-white">
+              <button type="button" onClick={() => setQueryText('')} className="text-[#777777] hover:text-[#4f0303]">
                 <X className="w-3.5 h-3.5" />
               </button>
             )}
           </div>
 
-          <div className="max-h-56 overflow-y-auto divide-y divide-slate-100 dark:divide-neutral-850 p-1">
+          <div className="max-h-56 overflow-y-auto divide-y divide-[#e8e5e0]  p-1">
             {filtered.length === 0 ? (
-              <div className="py-5 text-center text-slate-400 text-xs">ບໍ່ພົບສິນຄ້າ "{queryText}"</div>
+              <div className="py-5 text-center text-[#777777] text-xs">ບໍ່ພົບສິນຄ້າ "{queryText}"</div>
             ) : (
               filtered.map(p => {
                 const isSelected = p.id === value;
@@ -148,23 +148,23 @@ const SearchableProductSelect = ({
                       setIsOpen(false);
                     }}
                     className={`px-3 py-2 rounded-xl flex items-center justify-between cursor-pointer transition-colors ${
-                      isSelected 
-                        ? 'bg-sky-500/10 text-sky-500 font-bold' 
-                        : 'hover:bg-slate-100 dark:hover:bg-neutral-800 text-slate-700 dark:text-neutral-200'
+                      isSelected
+                        ? 'bg-[#4f0303]/10 text-[#4f0303] font-bold'
+                        : 'hover:bg-[#f4f3f0]  text-[#1a1a1a] '
                     }`}
                   >
                     <div className="flex items-center gap-2 truncate">
                       <span className={`text-[8px] px-1.5 py-0.5 rounded font-black font-mono shrink-0 uppercase ${
-                        p.categoryType === 'EQUIPMENT' 
-                          ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' 
-                          : 'bg-amber-500/10 text-amber-500 border border-amber-500/20'
+                        p.categoryType === 'EQUIPMENT'
+                          ? 'bg-[#4f0303]/10 text-[#4f0303] border border-[#4f0303]/20'
+                          : 'bg-[#4f0303]/10 text-[#4f0303] border border-[#4f0303]/20'
                       }`}>
                         {p.categoryType || 'COGS'}
                       </span>
                       <span className="truncate">{p.name}</span>
-                      <span className="text-[10px] text-slate-400 font-mono">({p.unit})</span>
+                      <span className="text-[10px] text-[#777777] font-mono">({p.unit})</span>
                     </div>
-                    {isSelected && <Check className="w-3.5 h-3.5 text-sky-500 shrink-0" />}
+                    {isSelected && <Check className="w-3.5 h-3.5 text-[#4f0303] shrink-0" />}
                   </div>
                 );
               })
@@ -200,7 +200,7 @@ export default function Suppliers() {
   const [billDate, setBillDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [billTime, setBillTime] = useState(format(new Date(), 'HH:mm'));
   const [billReceiptImage, setBillReceiptImage] = useState('');
-  
+
   // 2. Line Items in Invoice
   const [billItems, setBillItems] = useState<BillItemRow[]>([
     { productId: '', quantity: 1, quantityPerUnit: 1000, unit: 'g', priceOriginal: '', priceMode: 'total', remark: '' }
@@ -480,17 +480,17 @@ export default function Suppliers() {
 
   return (
     <div className="space-y-6 font-sans pb-16">
-      
+
       {/* Header Banner */}
-      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 bg-white dark:bg-[#141414] p-6 rounded-3xl border border-slate-200/80 dark:border-neutral-800 shadow-xs">
+      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 bg-white  p-6 rounded-3xl border border-[#e8e5e0]/80  shadow-xs">
         <div>
-          <span className="bg-[#052659] dark:bg-white dark:text-neutral-950 text-white text-[9px] font-black px-2.5 py-1 rounded-full uppercase tracking-widest">
+          <span className="bg-[#4f0303]   text-white text-[9px] font-black px-2.5 py-1 rounded-full uppercase tracking-widest">
             Le Ouve Procurement
           </span>
-          <h1 className="text-2xl md:text-3xl font-serif text-slate-800 dark:text-white mt-1">
+          <h1 className="text-2xl md:text-3xl font-serif text-[#1a1a1a]  mt-1">
             Supplier Quotes & Batch Invoices
           </h1>
-          <p className="text-xs text-slate-400 mt-0.5">
+          <p className="text-xs text-[#777777] mt-0.5">
             ບັນທຶກ, ແກ້ໄຂ ແລະ ອັບໂຫຼດຮູບສິນຄ້າ & ຮູບໃບບິນຊື້ເຄື່ອງ
           </p>
         </div>
@@ -498,17 +498,17 @@ export default function Suppliers() {
         <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => setIsSupplierManagerOpen(true)}
-            className="px-3.5 py-2 rounded-2xl bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-900 dark:hover:bg-neutral-800 text-slate-700 dark:text-neutral-200 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer border border-slate-200 dark:border-neutral-800"
+            className="px-3.5 py-2 rounded-2xl bg-[#f4f3f0] hover:bg-[#f4f3f0]   text-[#1a1a1a]  text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer border border-[#e8e5e0] "
           >
-            <Building2 className="w-3.5 h-3.5 text-sky-500" />
+            <Building2 className="w-3.5 h-3.5 text-[#4f0303]" />
             <span>ຈັດການຮ້ານຄ້າ</span>
           </button>
 
           <button
             onClick={() => setIsProductManagerOpen(true)}
-            className="px-3.5 py-2 rounded-2xl bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-900 dark:hover:bg-neutral-800 text-slate-700 dark:text-neutral-200 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer border border-slate-200 dark:border-neutral-800"
+            className="px-3.5 py-2 rounded-2xl bg-[#f4f3f0] hover:bg-[#f4f3f0]   text-[#1a1a1a]  text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer border border-[#e8e5e0] "
           >
-            <Layers className="w-3.5 h-3.5 text-amber-500" />
+            <Layers className="w-3.5 h-3.5 text-[#4f0303]" />
             <span>ຈັດການສິນຄ້າ</span>
           </button>
 
@@ -525,16 +525,16 @@ export default function Suppliers() {
       {/* Batch Form */}
       <div className="high-density-card p-6 space-y-6">
         <form onSubmit={handleSaveWholeBill} className="space-y-6">
-          <div className="space-y-4 border-b border-slate-100 dark:border-neutral-800 pb-6">
+          <div className="space-y-4 border-b border-[#e8e5e0]  pb-6">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-4">
-              
+
               <div className="lg:col-span-5 space-y-1.5">
                 <div className="flex justify-between items-center">
                   <label className="label-xs">ຮ້ານຄ້າ / ຜູ້ສະໜອງ (Supplier)</label>
                   <button
                     type="button"
                     onClick={() => setIsSupplierManagerOpen(true)}
-                    className="text-[10px] text-sky-500 hover:underline cursor-pointer"
+                    className="text-[10px] text-[#4f0303] hover:underline cursor-pointer"
                   >
                     + ເພີ່ມ/ແກ້ໄຂຊື່ຮ້ານ
                   </button>
@@ -563,7 +563,7 @@ export default function Suppliers() {
                 <div className="flex justify-between items-center">
                   <label className="label-xs">ສະກຸນເງິນ & ເລດ</label>
                   {billCurrency !== 'LAK' && (
-                    <span className="text-[10px] font-mono text-amber-500 font-bold">1 {billCurrency} = {billExchangeRate} ₭</span>
+                    <span className="text-[10px] font-mono text-[#4f0303] font-bold">1 {billCurrency} = {billExchangeRate} ₭</span>
                   )}
                 </div>
                 <div className="flex gap-2">
@@ -600,62 +600,62 @@ export default function Suppliers() {
             <div className="space-y-1.5 pt-2">
               <label className="label-xs flex justify-between">
                 <span>ຮູບພາບໃບບິນຊື້ເຄື່ອງ (Receipt Attachment)</span>
-                <span className="text-emerald-500 font-bold text-[9px]">ຮອງຮັບ Ctrl + V ວາງຮູບໄດ້ທັນທີ</span>
+                <span className="text-[#4f0303] font-bold text-[9px]">ຮອງຮັບ Ctrl + V ວາງຮູບໄດ້ທັນທີ</span>
               </label>
 
               <div
                 onDragOver={e => e.preventDefault()}
                 onDrop={handleDrop}
-                className="border-2 border-dashed border-slate-200 dark:border-neutral-700/80 rounded-2xl p-4 text-center hover:bg-slate-50 dark:hover:bg-neutral-800/40 relative cursor-pointer transition-colors min-h-[85px] flex items-center justify-center"
+                className="border-2 border-dashed border-[#e8e5e0]  rounded-2xl p-4 text-center hover:bg-[#faf9f6]  relative cursor-pointer transition-colors min-h-[85px] flex items-center justify-center"
               >
-                <input 
-                  type="file" 
-                  accept="image/*" 
+                <input
+                  type="file"
+                  accept="image/*"
                   onChange={async (e) => {
                     const file = e.target.files?.[0];
                     if (file) {
                       const b64 = await compressImage(file);
                       setBillReceiptImage(b64);
                     }
-                  }} 
-                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" 
+                  }}
+                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
                 />
-                
+
                 {billReceiptImage ? (
                   <div className="flex items-center gap-4 w-full justify-between px-2">
-                    <div 
+                    <div
                       onClick={(e) => { e.stopPropagation(); setPreviewImage(billReceiptImage); }}
                       className="relative group/thumb cursor-pointer shrink-0"
                       title="ກົດເພື່ອຊູມເບິ່ງຮູບເຕັມ"
                     >
-                      <img src={billReceiptImage} alt="Receipt" className="w-14 h-14 object-cover rounded-xl border border-neutral-700 shadow-sm" />
+                      <img src={billReceiptImage} alt="Receipt" className="w-14 h-14 object-cover rounded-xl border border-[#e8e5e0] shadow-sm" />
                       <div className="absolute inset-0 bg-black/40 rounded-xl flex items-center justify-center opacity-0 group-hover/thumb:opacity-100 transition-opacity">
                         <ZoomIn className="w-4 h-4 text-white" />
                       </div>
                     </div>
 
                     <div className="flex-1 text-left min-w-0">
-                      <span className="text-xs font-bold text-emerald-500 block">ອັບໂຫຼດຮູບໃບບິນສຳເລັດແລ້ວ ✓</span>
-                      <span className="text-[10px] text-slate-400 block mt-0.5">ຮູບໃບບິນນີ້ຈະຖືກບັນທຶກຕິດໄປນຳທຸກໆລາຍການສິນຄ້າດ້ານລຸ່ມ</span>
+                      <span className="inline-flex items-center gap-1 text-xs font-bold text-[#4f0303]"><CheckCircle2 className="h-3.5 w-3.5" /> ອັບໂຫຼດຮູບໃບບິນສຳເລັດແລ້ວ</span>
+                      <span className="text-[10px] text-[#777777] block mt-0.5">ຮູບໃບບິນນີ້ຈະຖືກບັນທຶກຕິດໄປນຳທຸກໆລາຍການສິນຄ້າດ້ານລຸ່ມ</span>
                     </div>
 
-                    <button 
-                      type="button" 
-                      onClick={(e) => { e.stopPropagation(); setBillReceiptImage(''); }} 
-                      className="p-2 text-rose-500 hover:bg-rose-500/10 rounded-xl cursor-pointer shrink-0"
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); setBillReceiptImage(''); }}
+                      className="p-2 text-[#4f0303] hover:bg-[#680404]/10 rounded-xl cursor-pointer shrink-0"
                       title="ລຶບຮູບ"
                     >
                       <X className="w-5 h-5" />
                     </button>
                   </div>
                 ) : (
-                  <div className="flex flex-col items-center justify-center gap-1.5 text-slate-400 py-1">
+                  <div className="flex flex-col items-center justify-center gap-1.5 text-[#777777] py-1">
                     <div className="flex items-center gap-2">
-                      <Upload className="w-5 h-5 text-sky-500" />
-                      <span className="text-xs font-bold text-slate-700 dark:text-neutral-200">ຄລິກເລືອກຮູບໃບບິນ, ລາກວາງໃສ່ບ່ອນນີ້</span>
+                      <Upload className="w-5 h-5 text-[#4f0303]" />
+                      <span className="text-xs font-bold text-[#1a1a1a] ">ຄລິກເລືອກຮູບໃບບິນ, ລາກວາງໃສ່ບ່ອນນີ້</span>
                     </div>
-                    <p className="text-[10px] text-slate-400">
-                      ຫຼື Capture ໜ້າຈໍແລ້ວກົດ <kbd className="px-1.5 py-0.5 rounded bg-neutral-200 dark:bg-neutral-800 text-[9px] text-neutral-800 dark:text-neutral-200 font-mono font-bold">Ctrl + V</kbd> ເພື່ອວາງຮູບໄດ້ທັນທີ
+                    <p className="text-[10px] text-[#777777]">
+                      ຫຼື Capture ໜ້າຈໍແລ້ວກົດ <kbd className="px-1.5 py-0.5 rounded bg-[#f4f3f0]  text-[9px] text-[#1a1a1a]  font-mono font-bold">Ctrl + V</kbd> ເພື່ອວາງຮູບໄດ້ທັນທີ
                     </p>
                   </div>
                 )}
@@ -667,13 +667,13 @@ export default function Suppliers() {
           {/* Line items list with SEARCHABLE PRODUCT SELECT */}
           <div className="space-y-3">
             <div className="flex justify-between items-center">
-              <h4 className="text-xs font-serif uppercase tracking-wider text-slate-800 dark:text-white">
+              <h4 className="text-xs font-serif uppercase tracking-wider text-[#1a1a1a] ">
                 ລາຍການສິນຄ້າໃນໃບບິນນີ້ ({billItems.length} ລາຍການ)
               </h4>
               <button
                 type="button"
                 onClick={handleAddBillItemRow}
-                className="text-xs font-bold text-sky-500 hover:underline flex items-center gap-1 cursor-pointer"
+                className="text-xs font-bold text-[#4f0303] hover:underline flex items-center gap-1 cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>ເພີ່ມລາຍການຊື້ໃນບິນນີ້</span>
@@ -685,62 +685,62 @@ export default function Suppliers() {
                 const prod = products.find(p => p.id === item.productId);
 
                 return (
-                  <div key={idx} className="p-4 rounded-2xl bg-slate-50 dark:bg-[#1a1a1a] border border-slate-200/70 dark:border-neutral-800 space-y-3">
+                  <div key={idx} className="p-4 rounded-2xl bg-[#faf9f6]  border border-[#e8e5e0]/70  space-y-3">
                     <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                      <span className="w-6 h-6 rounded-full bg-slate-200 dark:bg-neutral-800 text-[10px] font-bold flex items-center justify-center font-mono shrink-0">
+                      <span className="w-6 h-6 rounded-full bg-[#f4f3f0]  text-[10px] font-bold flex items-center justify-center font-mono shrink-0">
                         {idx + 1}
                       </span>
 
                       {/* Product Thumbnail with Zoom */}
                       <div className="shrink-0">
                         {prod?.productImage ? (
-                          <div 
+                          <div
                             onClick={() => setPreviewImage(prod.productImage)}
                             className="relative group/pimg cursor-pointer"
                             title="ກົດເພື່ອເບິ່ງຮູບໃຫຍ່"
                           >
-                            <img src={prod.productImage} alt={prod.name} className="w-9 h-9 rounded-xl object-cover border border-neutral-700" />
+                            <img src={prod.productImage} alt={prod.name} className="w-9 h-9 rounded-xl object-cover border border-[#e8e5e0]" />
                             <div className="absolute inset-0 bg-black/40 rounded-xl flex items-center justify-center opacity-0 group-hover/pimg:opacity-100 transition-opacity">
                               <ZoomIn className="w-3.5 h-3.5 text-white" />
                             </div>
                           </div>
                         ) : (
-                          <div className="w-9 h-9 rounded-xl bg-neutral-200 dark:bg-neutral-800 flex items-center justify-center text-slate-400">
+                          <div className="w-9 h-9 rounded-xl bg-[#f4f3f0]  flex items-center justify-center text-[#777777]">
                             <Package className="w-4 h-4" />
                           </div>
                         )}
                       </div>
 
-                      {/* 🌟 ປ່ຽນເປັນ Searchable Dropdown ພິມຄົ້ນຫາສິນຄ້າໄດ້ທັນທີ */}
+                      {/*  ປ່ຽນເປັນ Searchable Dropdown ພິມຄົ້ນຫາສິນຄ້າໄດ້ທັນທີ */}
                       <div className="flex-1 min-w-[220px]">
                         <SearchableProductSelect
                           products={products}
                           value={item.productId}
                           onChange={(pId) => {
                             const pr = products.find(p => p.id === pId);
-                            setBillItems(prev => prev.map((it, i) => i === idx ? { 
-                              ...it, 
-                              productId: pId, 
-                              unit: pr?.unit || 'g', 
-                              quantityPerUnit: pr?.packSize || 1000 
+                            setBillItems(prev => prev.map((it, i) => i === idx ? {
+                              ...it,
+                              productId: pId,
+                              unit: pr?.unit || 'g',
+                              quantityPerUnit: pr?.packSize || 1000
                             } : it));
                           }}
                         />
                       </div>
 
                       {/* Price Mode */}
-                      <div className="flex bg-slate-200 dark:bg-neutral-800 rounded-xl p-0.5 text-[10px] shrink-0 self-center">
+                      <div className="flex bg-[#f4f3f0]  rounded-xl p-0.5 text-[10px] shrink-0 self-center">
                         <button
                           type="button"
                           onClick={() => setBillItems(prev => prev.map((it, i) => i === idx ? { ...it, priceMode: 'total' } : it))}
-                          className={`px-3 py-1.5 rounded-lg font-bold cursor-pointer transition-all ${item.priceMode === 'total' ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950 shadow-xs' : 'text-slate-400'}`}
+                          className={`px-3 py-1.5 rounded-lg font-bold cursor-pointer transition-all ${item.priceMode === 'total' ? 'bg-[#4f0303] text-white   shadow-xs' : 'text-[#777777]'}`}
                         >
                           ລາຄາລວມ
                         </button>
                         <button
                           type="button"
                           onClick={() => setBillItems(prev => prev.map((it, i) => i === idx ? { ...it, priceMode: 'per_pack' } : it))}
-                          className={`px-3 py-1.5 rounded-lg font-bold cursor-pointer transition-all ${item.priceMode === 'per_pack' ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950 shadow-xs' : 'text-slate-400'}`}
+                          className={`px-3 py-1.5 rounded-lg font-bold cursor-pointer transition-all ${item.priceMode === 'per_pack' ? 'bg-[#4f0303] text-white   shadow-xs' : 'text-[#777777]'}`}
                         >
                           ຕໍ່ແພັກ
                         </button>
@@ -759,22 +759,22 @@ export default function Suppliers() {
                             }}
                             className="crystal-input w-full !py-2 font-mono font-bold text-right text-xs pr-12 h-10"
                           />
-                          <span className="absolute right-3 top-2.5 text-[10px] text-slate-400 font-bold pointer-events-none">
+                          <span className="absolute right-3 top-2.5 text-[10px] text-[#777777] font-bold pointer-events-none">
                             {billCurrency}
                           </span>
                         </div>
                       </div>
 
                       {billItems.length > 1 && (
-                        <button type="button" onClick={() => handleRemoveBillItemRow(idx)} className="p-2 text-rose-500 hover:bg-rose-500/10 rounded-xl cursor-pointer self-center">
+                        <button type="button" onClick={() => handleRemoveBillItemRow(idx)} className="p-2 text-[#4f0303] hover:bg-[#680404]/10 rounded-xl cursor-pointer self-center">
                           <Trash2 className="w-4 h-4" />
                         </button>
                       )}
                     </div>
 
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs pt-1 border-t border-slate-200/60 dark:border-neutral-800/60">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs pt-1 border-t border-[#e8e5e0]/60 ">
                       <div>
-                        <label className="text-[9px] font-bold text-slate-400 block mb-1">ຈຳນວນແພັກ/ຖົງ</label>
+                        <label className="text-[9px] font-bold text-[#777777] block mb-1">ຈຳນວນແພັກ/ຖົງ</label>
                         <input
                           type="number"
                           min="1"
@@ -785,7 +785,7 @@ export default function Suppliers() {
                         />
                       </div>
                       <div>
-                        <label className="text-[9px] font-bold text-slate-400 block mb-1">ຂະໜາດຕໍ່ແພັກ</label>
+                        <label className="text-[9px] font-bold text-[#777777] block mb-1">ຂະໜາດຕໍ່ແພັກ</label>
                         <input
                           type="number"
                           placeholder="1000"
@@ -795,7 +795,7 @@ export default function Suppliers() {
                         />
                       </div>
                       <div>
-                        <label className="text-[9px] font-bold text-slate-400 block mb-1">ຫົວໜ່ວຍ (g/ml/pcs)</label>
+                        <label className="text-[9px] font-bold text-[#777777] block mb-1">ຫົວໜ່ວຍ (g/ml/pcs)</label>
                         <input
                           type="text"
                           placeholder="g"
@@ -805,7 +805,7 @@ export default function Suppliers() {
                         />
                       </div>
                       <div>
-                        <label className="text-[9px] font-bold text-slate-400 block mb-1">ໝາຍເຫດ</label>
+                        <label className="text-[9px] font-bold text-[#777777] block mb-1">ໝາຍເຫດ</label>
                         <input
                           type="text"
                           placeholder="ໝາຍເຫດ..."
@@ -822,23 +822,23 @@ export default function Suppliers() {
           </div>
 
           {/* Grand Total */}
-          <div className="p-4 rounded-2xl bg-neutral-100 dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 flex flex-col sm:flex-row justify-between sm:items-center gap-3">
+          <div className="p-4 rounded-2xl bg-[#f4f3f0]  border border-[#e8e5e0]  flex flex-col sm:flex-row justify-between sm:items-center gap-3">
             <div>
-              <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider flex items-center gap-1.5">
+              <span className="text-[10px] font-black uppercase text-[#777777] tracking-wider flex items-center gap-1.5">
                 <Calculator className="w-3.5 h-3.5" />
                 <span>ກວດສອບຍອດລວມທັງໝົດຂອງໃບບິນ (Grand Total Check)</span>
               </span>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              <p className="text-xs text-[#666666]  mt-0.5">
                 ກວດເບິ່ງວ່າຍອດລວມນີ້ ກົງກັບຕົວເລກ Grand Total ໃນເຈ້ຍບິນແລ້ວຫຼືບໍ່
               </p>
             </div>
 
             <div className="text-right">
-              <span className="text-2xl font-serif font-bold text-slate-800 dark:text-white font-mono block">
+              <span className="text-2xl font-serif font-bold text-[#1a1a1a]  font-mono block">
                 {billSummary.grandTotalOriginal.toLocaleString()} {billCurrency}
               </span>
               {billCurrency !== 'LAK' && (
-                <span className="text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400 block mt-0.5">
+                <span className="text-xs font-mono font-bold text-[#4f0303]  block mt-0.5">
                   ≈ {Math.round(billSummary.grandTotalLAK).toLocaleString()} ₭
                 </span>
               )}
@@ -849,7 +849,7 @@ export default function Suppliers() {
             <button
               type="button"
               onClick={handleAddBillItemRow}
-              className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-neutral-800 text-xs font-bold cursor-pointer"
+              className="px-4 py-2.5 rounded-xl border border-[#e8e5e0]  text-xs font-bold cursor-pointer"
             >
               + ເພີ່ມແຖວສິນຄ້າ
             </button>
@@ -867,10 +867,10 @@ export default function Suppliers() {
 
       {/* Historical Quotes Table */}
       <div className="high-density-card p-6 overflow-hidden">
-        <div className="flex justify-between items-center border-b border-slate-100 dark:border-neutral-800 pb-3 mb-4">
+        <div className="flex justify-between items-center border-b border-[#e8e5e0]  pb-3 mb-4">
           <div>
-            <h3 className="text-sm font-serif text-slate-800 dark:text-white">ປະຫວັດລາຄາ & ໃບບິນທັງໝົດ</h3>
-            <p className="text-xs text-slate-400">ກົດທີ່ຮູບສິນຄ້າ ຫຼື ໄອຄອນຕາເພື່ອເບິ່ງຮູບໃຫຍ່</p>
+            <h3 className="text-sm font-serif text-[#1a1a1a] ">ປະຫວັດລາຄາ & ໃບບິນທັງໝົດ</h3>
+            <p className="text-xs text-[#777777]">ກົດທີ່ຮູບສິນຄ້າ ຫຼື ໄອຄອນຕາເພື່ອເບິ່ງຮູບໃຫຍ່</p>
           </div>
           <input
             type="text"
@@ -883,7 +883,7 @@ export default function Suppliers() {
 
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
-            <thead className="bg-slate-50 dark:bg-neutral-900/60 text-[10px] font-black uppercase text-slate-400">
+            <thead className="bg-[#faf9f6]  text-[10px] font-black uppercase text-[#777777]">
               <tr>
                 <th className="p-3">ວັນທີ</th>
                 <th className="p-3">ສິນຄ້າ</th>
@@ -894,7 +894,7 @@ export default function Suppliers() {
                 <th className="p-3 text-center">ຈັດການ</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-neutral-800">
+            <tbody className="divide-y divide-[#e8e5e0] ">
               {supplierPrices
                 .filter(p => {
                   const prod = products.find(pr => pr.id === p.productId)?.name || '';
@@ -904,30 +904,30 @@ export default function Suppliers() {
                   const prod = products.find(pr => pr.id === item.productId);
                   const total = item.totalPriceLAK || (item.currency === 'LAK' ? item.priceOriginal : item.priceOriginal * item.exchangeRate);
                   return (
-                    <tr key={item.id} className="hover:bg-slate-50/50 dark:hover:bg-neutral-800/30">
-                      <td className="p-3 font-mono text-slate-400">{item.date}</td>
-                      <td className="p-3 font-bold text-slate-800 dark:text-white">
+                    <tr key={item.id} className="hover:bg-[#f4f3f0]/50 ">
+                      <td className="p-3 font-mono text-[#777777]">{item.date}</td>
+                      <td className="p-3 font-bold text-[#1a1a1a] ">
                         <div className="flex items-center gap-2.5">
                           {prod?.productImage ? (
-                            <div 
+                            <div
                               onClick={() => setPreviewImage(prod.productImage)}
                               className="relative group/pimg cursor-pointer shrink-0"
                               title="ກົດເພື່ອເບິ່ງຮູບໃຫຍ່"
                             >
-                              <img src={prod.productImage} alt={prod.name} className="w-8 h-8 rounded-lg object-cover border border-neutral-700" />
+                              <img src={prod.productImage} alt={prod.name} className="w-8 h-8 rounded-lg object-cover border border-[#e8e5e0]" />
                               <div className="absolute inset-0 bg-black/40 rounded-lg flex items-center justify-center opacity-0 group-hover/pimg:opacity-100 transition-opacity">
                                 <ZoomIn className="w-3.5 h-3.5 text-white" />
                               </div>
                             </div>
                           ) : (
-                            <div className="w-8 h-8 rounded-lg bg-neutral-200 dark:bg-neutral-800 flex items-center justify-center text-slate-400 shrink-0">
+                            <div className="w-8 h-8 rounded-lg bg-[#f4f3f0]  flex items-center justify-center text-[#777777] shrink-0">
                               <Package className="w-4 h-4" />
                             </div>
                           )}
 
                           <div>
                             <span>{prod?.name || 'Item'}</span>
-                            <span className="text-[10px] text-slate-400 block font-normal">{item.quantity}ແພັກ × {item.quantityPerUnit}{item.unit}</span>
+                            <span className="text-[10px] text-[#777777] block font-normal">{item.quantity}ແພັກ × {item.quantityPerUnit}{item.unit}</span>
                           </div>
                         </div>
                       </td>
@@ -935,25 +935,25 @@ export default function Suppliers() {
                       <td className="p-3 text-right font-mono font-medium whitespace-nowrap">
                         {item.totalPriceOriginal ? Number(item.totalPriceOriginal).toLocaleString() : Number(item.priceOriginal).toLocaleString()} {item.currency}
                       </td>
-                      <td className="p-3 text-right font-mono font-bold text-emerald-500 whitespace-nowrap">
+                      <td className="p-3 text-right font-mono font-bold text-[#4f0303] whitespace-nowrap">
                         {Math.round(total).toLocaleString()} ₭
                       </td>
                       <td className="p-3 text-center">
                         {item.receiptImage ? (
-                          <button 
-                            onClick={() => setPreviewImage(item.receiptImage)} 
-                            className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 cursor-pointer"
+                          <button
+                            onClick={() => setPreviewImage(item.receiptImage)}
+                            className="p-1.5 rounded-lg bg-[#4f0303]/10 text-[#4f0303] hover:bg-[#680404]/20 cursor-pointer"
                             title="ກົດເບິ່ງຮູບໃບບິນໃຫຍ່"
                           >
                             <Eye className="w-3.5 h-3.5" />
                           </button>
-                        ) : <span className="text-slate-500">-</span>}
+                        ) : <span className="text-[#666666]">-</span>}
                       </td>
                       <td className="p-3 text-center">
                         <div className="flex items-center justify-center gap-1.5">
-                          <button 
+                          <button
                             onClick={() => {
-                              const rawVal = item.priceMode === 'total' 
+                              const rawVal = item.priceMode === 'total'
                                 ? (item.totalPriceOriginal || item.priceOriginal * item.quantity)
                                 : item.priceOriginal;
 
@@ -969,15 +969,15 @@ export default function Suppliers() {
                               });
                               setEditPriceDisplay(Number(rawVal).toLocaleString());
                               setIsEditModalOpen(true);
-                            }} 
-                            className="p-1.5 text-slate-400 hover:text-sky-500 hover:bg-sky-500/10 rounded-lg cursor-pointer transition-colors"
+                            }}
+                            className="p-1.5 text-[#777777] hover:text-[#4f0303] hover:bg-[#680404]/10 rounded-lg cursor-pointer transition-colors"
                             title="ແກ້ໄຂລາຄາ & ອັບໂຫຼດຮູບສິນຄ້າ"
                           >
                             <Edit2 className="w-3.5 h-3.5" />
                           </button>
-                          <button 
-                            onClick={() => setAppModal({ isOpen: true, title: 'ຢືນຢັນການລຶບ', type: 'delete_quote', data: item.id })} 
-                            className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 rounded-lg cursor-pointer transition-colors"
+                          <button
+                            onClick={() => setAppModal({ isOpen: true, title: 'ຢືນຢັນການລຶບ', type: 'delete_quote', data: item.id })}
+                            className="p-1.5 text-[#777777] hover:text-[#4f0303] hover:bg-[#680404]/10 rounded-lg cursor-pointer transition-colors"
                             title="ລຶບລາຍການ"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -992,19 +992,19 @@ export default function Suppliers() {
         </div>
       </div>
 
-      {/* 🏪 Modal: Manage Suppliers */}
+      {/*  Modal: Manage Suppliers */}
       {isSupplierManagerOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm" onClick={() => setIsSupplierManagerOpen(false)}>
-          <div className="bg-white dark:bg-[#141414] rounded-3xl p-6 border border-slate-200 dark:border-neutral-800 max-w-md w-full space-y-4 max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center border-b border-slate-100 dark:border-neutral-800 pb-3">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#1a1a1a]/80 backdrop-blur-sm" onClick={() => setIsSupplierManagerOpen(false)}>
+          <div className="bg-white  rounded-3xl p-6 border border-[#e8e5e0]  max-w-md w-full space-y-4 max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center border-b border-[#e8e5e0]  pb-3">
               <div>
-                <h3 className="text-base font-serif text-slate-800 dark:text-white flex items-center gap-2">
-                  <Building2 className="w-4 h-4 text-sky-500" />
+                <h3 className="text-base font-serif text-[#1a1a1a]  flex items-center gap-2">
+                  <Building2 className="w-4 h-4 text-[#4f0303]" />
                   <span>ຈັດການລາຍຊື່ຮ້ານຄ້າ (Suppliers List)</span>
                 </h3>
-                <p className="text-[10px] text-slate-400 mt-0.5">ແກ້ໄຂຊື່ຮ້ານທີ່ສະກົດຜິດ (ລະບົບຈະອັບເດດໃນບິນເກົ່າໃຫ້ເອງ)</p>
+                <p className="text-[10px] text-[#777777] mt-0.5">ແກ້ໄຂຊື່ຮ້ານທີ່ສະກົດຜິດ (ລະບົບຈະອັບເດດໃນບິນເກົ່າໃຫ້ເອງ)</p>
               </div>
-              <button onClick={() => setIsSupplierManagerOpen(false)} className="text-slate-400 hover:text-white p-1">✕</button>
+              <button onClick={() => setIsSupplierManagerOpen(false)} className="text-[#777777] hover:text-[#4f0303] p-1"><X className="h-4 w-4" /></button>
             </div>
 
             <div className="space-y-1.5">
@@ -1032,11 +1032,11 @@ export default function Suppliers() {
               </div>
             </div>
 
-            <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-neutral-800">
+            <div className="space-y-2 pt-2 border-t border-[#e8e5e0] ">
               <label className="label-xs block">ລາຍຊື່ຮ້ານຄ້າໃນລະບົບ ({firestoreSuppliers.length} ຮ້ານ)</label>
               <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
                 {firestoreSuppliers.map(sup => (
-                  <div key={sup.id} className="p-2.5 rounded-xl bg-slate-50 dark:bg-[#1a1a1a] border border-slate-200/60 dark:border-neutral-800 flex items-center justify-between gap-2">
+                  <div key={sup.id} className="p-2.5 rounded-xl bg-[#faf9f6]  border border-[#e8e5e0]/60  flex items-center justify-between gap-2">
                     {editingSupplierId === sup.id ? (
                       <div className="flex items-center gap-1.5 flex-1">
                         <input
@@ -1049,26 +1049,26 @@ export default function Suppliers() {
                         <button
                           type="button"
                           onClick={() => handleUpdateSupplierName(sup.id, sup.name)}
-                          className="p-1.5 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600"
+                          className="p-1.5 bg-[#4f0303] text-white rounded-lg hover:bg-[#680404]"
                         >
                           <Check className="w-3.5 h-3.5" />
                         </button>
                         <button
                           type="button"
                           onClick={() => setEditingSupplierId(null)}
-                          className="p-1.5 bg-neutral-200 dark:bg-neutral-800 text-slate-400 rounded-lg"
+                          className="p-1.5 bg-[#f4f3f0]  text-[#777777] rounded-lg"
                         >
                           <X className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     ) : (
                       <>
-                        <span className="text-xs font-bold text-slate-800 dark:text-white truncate">{sup.name}</span>
+                        <span className="text-xs font-bold text-[#1a1a1a]  truncate">{sup.name}</span>
                         <div className="flex items-center gap-1">
                           <button
                             type="button"
                             onClick={() => { setEditingSupplierId(sup.id); setEditSupplierName(sup.name); }}
-                            className="p-1.5 text-slate-400 hover:text-sky-500 rounded-lg cursor-pointer"
+                            className="p-1.5 text-[#777777] hover:text-[#4f0303] rounded-lg cursor-pointer"
                             title="ແກ້ໄຂຊື່ຮ້ານ"
                           >
                             <Edit2 className="w-3.5 h-3.5" />
@@ -1080,7 +1080,7 @@ export default function Suppliers() {
                               await deleteDoc(doc(db, 'suppliers', sup.id));
                               if (billSupplier === sup.name) setBillSupplier(firestoreSuppliers[0]?.name || '');
                             }}
-                            className="p-1.5 text-slate-400 hover:text-rose-500 rounded-lg cursor-pointer"
+                            className="p-1.5 text-[#777777] hover:text-[#4f0303] rounded-lg cursor-pointer"
                             title="ລຶບຮ້ານ"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -1096,24 +1096,24 @@ export default function Suppliers() {
         </div>
       )}
 
-      {/* 📦 Modal: Manage Products */}
+      {/*  Modal: Manage Products */}
       {isProductManagerOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm" onClick={() => setIsProductManagerOpen(false)}>
-          <div className="bg-white dark:bg-[#141414] rounded-3xl p-6 border border-slate-200 dark:border-neutral-800 max-w-xl w-full space-y-4 max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center border-b border-slate-100 dark:border-neutral-800 pb-3">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#1a1a1a]/80 backdrop-blur-sm" onClick={() => setIsProductManagerOpen(false)}>
+          <div className="bg-white  rounded-3xl p-6 border border-[#e8e5e0]  max-w-xl w-full space-y-4 max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center border-b border-[#e8e5e0]  pb-3">
               <div>
-                <h3 className="text-base font-serif text-slate-800 dark:text-white flex items-center gap-2">
-                  <Layers className="w-4 h-4 text-amber-500" />
+                <h3 className="text-base font-serif text-[#1a1a1a]  flex items-center gap-2">
+                  <Layers className="w-4 h-4 text-[#4f0303]" />
                   <span>ຈັດການສິນຄ້າ & ປ່ຽນໝວດໝູ່</span>
                 </h3>
-                <p className="text-[10px] text-slate-400 mt-0.5">ແກ້ໄຂຊື່, ປ່ຽນປະເພດ COGS ເປັນ CAPEX (ອຸປະກອນ) ຫຼື OPEX</p>
+                <p className="text-[10px] text-[#777777] mt-0.5">ແກ້ໄຂຊື່, ປ່ຽນປະເພດ COGS ເປັນ CAPEX (ອຸປະກອນ) ຫຼື OPEX</p>
               </div>
-              <button onClick={() => setIsProductManagerOpen(false)} className="text-slate-400 hover:text-white p-1">✕</button>
+              <button onClick={() => setIsProductManagerOpen(false)} className="text-[#777777] hover:text-[#4f0303] p-1"><X className="h-4 w-4" /></button>
             </div>
 
             {editingProduct ? (
-              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-[#1a1a1a] border border-slate-200/70 dark:border-neutral-800 space-y-4">
-                <h4 className="text-xs font-bold text-slate-700 dark:text-neutral-200">ກຳລັງແກ້ໄຂ: {editingProduct.name}</h4>
+              <div className="p-4 rounded-2xl bg-[#faf9f6]  border border-[#e8e5e0]/70  space-y-4">
+                <h4 className="text-xs font-bold text-[#1a1a1a] ">ກຳລັງແກ້ໄຂ: {editingProduct.name}</h4>
                 <div>
                   <label className="label-xs block mb-1">ຊື່ສິນຄ້າ</label>
                   <input
@@ -1130,21 +1130,21 @@ export default function Suppliers() {
                     <button
                       type="button"
                       onClick={() => setEditingProduct({ ...editingProduct, categoryType: 'COGS' })}
-                      className={`py-2 px-1 text-xs font-bold rounded-xl border text-center cursor-pointer transition-all ${editingProduct.categoryType === 'COGS' ? 'bg-amber-500/10 border-amber-500 text-amber-500 font-black' : 'border-neutral-800 text-slate-400'}`}
+                      className={`py-2 px-1 text-xs font-bold rounded-xl border text-center cursor-pointer transition-all ${editingProduct.categoryType === 'COGS' ? 'bg-[#4f0303]/10 border-[#4f0303]/15 text-[#4f0303] font-black' : 'border-[#e8e5e0] text-[#777777]'}`}
                     >
                       COGS (ວັດຖຸດິບ)
                     </button>
                     <button
                       type="button"
                       onClick={() => setEditingProduct({ ...editingProduct, categoryType: 'EQUIPMENT' })}
-                      className={`py-2 px-1 text-xs font-bold rounded-xl border text-center cursor-pointer transition-all ${editingProduct.categoryType === 'EQUIPMENT' ? 'bg-purple-500/10 border-purple-500 text-purple-500 font-black' : 'border-neutral-800 text-slate-400'}`}
+                      className={`py-2 px-1 text-xs font-bold rounded-xl border text-center cursor-pointer transition-all ${editingProduct.categoryType === 'EQUIPMENT' ? 'bg-[#4f0303]/10 border-[#4f0303]/15 text-[#4f0303] font-black' : 'border-[#e8e5e0] text-[#777777]'}`}
                     >
                       ອຸປະກອນ (CAPEX)
                     </button>
                     <button
                       type="button"
                       onClick={() => setEditingProduct({ ...editingProduct, categoryType: 'OPERATIONAL' })}
-                      className={`py-2 px-1 text-xs font-bold rounded-xl border text-center cursor-pointer transition-all ${editingProduct.categoryType === 'OPERATIONAL' ? 'bg-blue-500/10 border-blue-500 text-blue-500 font-black' : 'border-neutral-800 text-slate-400'}`}
+                      className={`py-2 px-1 text-xs font-bold rounded-xl border text-center cursor-pointer transition-all ${editingProduct.categoryType === 'OPERATIONAL' ? 'bg-[#4f0303]/10 border-[#4f0303]/15 text-[#4f0303] font-black' : 'border-[#e8e5e0] text-[#777777]'}`}
                     >
                       ດຳເນີນງານ (OPEX)
                     </button>
@@ -1174,7 +1174,7 @@ export default function Suppliers() {
 
                 <div>
                   <label className="label-xs flex justify-between mb-1"><span>ຮູບສິນຄ້າ (Ctrl+V ວາງໄດ້)</span></label>
-                  <div className="border border-dashed border-slate-300 dark:border-neutral-700 rounded-xl p-2 relative flex items-center justify-between">
+                  <div className="border border-dashed border-[#e8e5e0]  rounded-xl p-2 relative flex items-center justify-between">
                     <input type="file" accept="image/*" onChange={async (e) => {
                       const file = e.target.files?.[0];
                       if (file) {
@@ -1184,18 +1184,18 @@ export default function Suppliers() {
                     }} className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" />
                     {editingProduct.productImage ? (
                       <div className="flex items-center gap-2 w-full justify-between">
-                        <img src={editingProduct.productImage} alt="Product" className="w-8 h-8 rounded-lg object-cover border border-neutral-700" />
-                        <span className="text-[11px] text-emerald-500 font-bold">ມີຮູບສິນຄ້າແລ້ວ ✓</span>
-                        <button type="button" onClick={() => setEditingProduct({ ...editingProduct, productImage: '' })} className="text-rose-500 p-1">✕</button>
+                        <img src={editingProduct.productImage} alt="Product" className="w-8 h-8 rounded-lg object-cover border border-[#e8e5e0]" />
+                        <span className="inline-flex items-center gap-1 text-[11px] text-[#4f0303] font-bold"><CheckCircle2 className="h-3 w-3" /> ມີຮູບສິນຄ້າແລ້ວ</span>
+                        <button type="button" onClick={() => setEditingProduct({ ...editingProduct, productImage: '' })} className="text-[#4f0303] p-1"><X className="h-4 w-4" /></button>
                       </div>
                     ) : (
-                      <span className="text-xs text-slate-400 mx-auto flex items-center gap-1.5"><ImageIcon className="w-3.5 h-3.5" /> ຄລິກ ຫຼື ວາງຮູບ (Ctrl+V)</span>
+                      <span className="text-xs text-[#777777] mx-auto flex items-center gap-1.5"><ImageIcon className="w-3.5 h-3.5" /> ຄລິກ ຫຼື ວາງຮູບ (Ctrl+V)</span>
                     )}
                   </div>
                 </div>
 
                 <div className="flex justify-end gap-2 pt-2">
-                  <button type="button" onClick={() => setEditingProduct(null)} className="px-3.5 py-1.5 rounded-xl border text-xs text-slate-400">ຍົກເລີກ</button>
+                  <button type="button" onClick={() => setEditingProduct(null)} className="px-3.5 py-1.5 rounded-xl border text-xs text-[#777777]">ຍົກເລີກ</button>
                   <button type="button" onClick={async () => {
                     await updateDoc(doc(db, 'products', editingProduct.id), {
                       name: editingProduct.name.trim(),
@@ -1215,34 +1215,34 @@ export default function Suppliers() {
                 <label className="label-xs block">ລາຍການສິນຄ້າໃນລະບົບ ({products.length} ລາຍການ)</label>
                 <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
                   {products.map(p => (
-                    <div key={p.id} className="p-3 rounded-xl bg-slate-50 dark:bg-[#1a1a1a] border border-slate-200/60 dark:border-neutral-800 flex items-center justify-between gap-3">
+                    <div key={p.id} className="p-3 rounded-xl bg-[#faf9f6]  border border-[#e8e5e0]/60  flex items-center justify-between gap-3">
                       <div className="flex items-center gap-2.5 min-w-0">
                         {p.productImage ? (
-                          <img src={p.productImage} alt={p.name} className="w-8 h-8 rounded-lg object-cover border border-neutral-700 shrink-0" />
+                          <img src={p.productImage} alt={p.name} className="w-8 h-8 rounded-lg object-cover border border-[#e8e5e0] shrink-0" />
                         ) : (
-                          <div className="w-8 h-8 rounded-lg bg-neutral-200 dark:bg-neutral-800 flex items-center justify-center text-slate-400 shrink-0">
+                          <div className="w-8 h-8 rounded-lg bg-[#f4f3f0]  flex items-center justify-center text-[#777777] shrink-0">
                             <Package className="w-4 h-4" />
                           </div>
                         )}
                         <div className="min-w-0">
-                          <span className="text-xs font-bold text-slate-800 dark:text-white block truncate">{p.name}</span>
-                          <span className="text-[10px] text-slate-400 font-mono">{p.packSize}{p.unit}</span>
+                          <span className="text-xs font-bold text-[#1a1a1a]  block truncate">{p.name}</span>
+                          <span className="text-[10px] text-[#777777] font-mono">{p.packSize}{p.unit}</span>
                         </div>
                       </div>
 
                       <div className="flex items-center gap-2 shrink-0">
                         <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${
-                          p.categoryType === 'EQUIPMENT' ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' :
-                          p.categoryType === 'OPERATIONAL' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' :
-                          'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                          p.categoryType === 'EQUIPMENT' ? 'bg-[#4f0303]/10 text-[#4f0303] border border-[#4f0303]/20' :
+                          p.categoryType === 'OPERATIONAL' ? 'bg-[#4f0303]/10 text-[#4f0303] border border-[#4f0303]/20' :
+                          'bg-[#4f0303]/10 text-[#4f0303] border border-[#4f0303]/20'
                         }`}>
                           {p.categoryType || 'COGS'}
                         </span>
-                        
+
                         <button
                           type="button"
                           onClick={() => setEditingProduct({ ...p, categoryType: p.categoryType || 'COGS' })}
-                          className="p-1.5 text-slate-400 hover:text-sky-500 rounded-lg cursor-pointer"
+                          className="p-1.5 text-[#777777] hover:text-[#4f0303] rounded-lg cursor-pointer"
                           title="ແກ້ໄຂ"
                         >
                           <Edit2 className="w-3.5 h-3.5" />
@@ -1257,10 +1257,10 @@ export default function Suppliers() {
         </div>
       )}
 
-      {/* 🔍 Lightbox Zoom Modal */}
+      {/*  Lightbox Zoom Modal */}
       {previewImage && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md" onClick={() => setPreviewImage(null)}>
-          <div className="relative max-w-2xl max-h-[90vh] bg-[#141414] rounded-3xl p-3 border border-neutral-800" onClick={e => e.stopPropagation()}>
+          <div className="relative max-w-2xl max-h-[90vh] bg-[#f4f3f0] rounded-3xl p-3 border border-[#e8e5e0]" onClick={e => e.stopPropagation()}>
             <button onClick={() => setPreviewImage(null)} className="absolute top-4 right-4 p-2 rounded-full bg-black/70 text-white hover:bg-black cursor-pointer z-10">
               <X className="w-5 h-5" />
             </button>
@@ -1269,18 +1269,18 @@ export default function Suppliers() {
         </div>
       )}
 
-      {/* 📝 Modal: Edit Quote */}
+      {/*  Modal: Edit Quote */}
       {isEditModalOpen && editingItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm" onClick={() => setIsEditModalOpen(false)}>
-          <div className="bg-white dark:bg-[#141414] rounded-3xl p-6 border border-slate-200 dark:border-neutral-800 max-w-lg w-full space-y-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center border-b border-slate-100 dark:border-neutral-800 pb-3">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#1a1a1a]/80 backdrop-blur-sm" onClick={() => setIsEditModalOpen(false)}>
+          <div className="bg-white  rounded-3xl p-6 border border-[#e8e5e0]  max-w-lg w-full space-y-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center border-b border-[#e8e5e0]  pb-3">
               <div>
-                <h3 className="text-base font-serif text-slate-800 dark:text-white flex items-center gap-2">
-                  <Edit2 className="w-4 h-4 text-sky-500" />
+                <h3 className="text-base font-serif text-[#1a1a1a]  flex items-center gap-2">
+                  <Edit2 className="w-4 h-4 text-[#4f0303]" />
                   <span>ແກ້ໄຂລາຍການລາຄາ & ໝວດໝູ່ສິນຄ້າ</span>
                 </h3>
               </div>
-              <button onClick={() => setIsEditModalOpen(false)} className="text-slate-400 hover:text-white p-1">✕</button>
+              <button onClick={() => setIsEditModalOpen(false)} className="text-[#777777] hover:text-[#4f0303] p-1"><X className="h-4 w-4" /></button>
             </div>
 
             <form onSubmit={handleSaveEditedItem} className="space-y-4">
@@ -1291,9 +1291,9 @@ export default function Suppliers() {
                   value={editingItem.productId}
                   onChange={(pId) => {
                     const pr = products.find(p => p.id === pId);
-                    setEditingItem({ 
-                      ...editingItem, 
-                      productId: pId, 
+                    setEditingItem({
+                      ...editingItem,
+                      productId: pId,
                       unit: pr?.unit || editingItem.unit,
                       productImage: pr?.productImage || '',
                       categoryType: pr?.categoryType || 'COGS'
@@ -1308,21 +1308,21 @@ export default function Suppliers() {
                   <button
                     type="button"
                     onClick={() => setEditingItem({ ...editingItem, categoryType: 'COGS' })}
-                    className={`py-1.5 text-xs font-bold rounded-xl border text-center cursor-pointer ${editingItem.categoryType === 'COGS' ? 'bg-amber-500/10 border-amber-500 text-amber-500 font-bold' : 'border-neutral-800 text-slate-400'}`}
+                    className={`py-1.5 text-xs font-bold rounded-xl border text-center cursor-pointer ${editingItem.categoryType === 'COGS' ? 'bg-[#4f0303]/10 border-[#4f0303]/15 text-[#4f0303] font-bold' : 'border-[#e8e5e0] text-[#777777]'}`}
                   >
                     COGS (ວັດຖຸດິບ)
                   </button>
                   <button
                     type="button"
                     onClick={() => setEditingItem({ ...editingItem, categoryType: 'EQUIPMENT' })}
-                    className={`py-1.5 text-xs font-bold rounded-xl border text-center cursor-pointer ${editingItem.categoryType === 'EQUIPMENT' ? 'bg-purple-500/10 border-purple-500 text-purple-500 font-bold' : 'border-neutral-800 text-slate-400'}`}
+                    className={`py-1.5 text-xs font-bold rounded-xl border text-center cursor-pointer ${editingItem.categoryType === 'EQUIPMENT' ? 'bg-[#4f0303]/10 border-[#4f0303]/15 text-[#4f0303] font-bold' : 'border-[#e8e5e0] text-[#777777]'}`}
                   >
                     ອຸປະກອນ (CAPEX)
                   </button>
                   <button
                     type="button"
                     onClick={() => setEditingItem({ ...editingItem, categoryType: 'OPERATIONAL' })}
-                    className={`py-1.5 text-xs font-bold rounded-xl border text-center cursor-pointer ${editingItem.categoryType === 'OPERATIONAL' ? 'bg-blue-500/10 border-blue-500 text-blue-500 font-bold' : 'border-neutral-800 text-slate-400'}`}
+                    className={`py-1.5 text-xs font-bold rounded-xl border text-center cursor-pointer ${editingItem.categoryType === 'OPERATIONAL' ? 'bg-[#4f0303]/10 border-[#4f0303]/15 text-[#4f0303] font-bold' : 'border-[#e8e5e0] text-[#777777]'}`}
                   >
                     ດຳເນີນງານ (OPEX)
                   </button>
@@ -1330,12 +1330,12 @@ export default function Suppliers() {
               </div>
 
               {/* ຮູບສິນຄ້າ */}
-              <div className="p-3 rounded-2xl bg-sky-500/10 border border-sky-500/20 space-y-1.5">
-                <label className="label-xs !text-sky-500 flex justify-between">
+              <div className="p-3 rounded-2xl bg-[#4f0303]/10 border border-[#4f0303]/20 space-y-1.5">
+                <label className="label-xs !text-[#4f0303] flex justify-between">
                   <span>ຮູບພາບສິນຄ້າຕົວຈິງ</span>
                   <span className="font-bold text-[9px]">Ctrl+V</span>
                 </label>
-                <div className="border border-dashed border-sky-500/30 rounded-xl p-2 relative flex items-center justify-between">
+                <div className="border border-dashed border-[#4f0303]/30 rounded-xl p-2 relative flex items-center justify-between">
                   <input type="file" accept="image/*" onChange={async (e) => {
                     const file = e.target.files?.[0];
                     if (file) {
@@ -1343,15 +1343,15 @@ export default function Suppliers() {
                       setEditingItem((prev: any) => ({ ...prev, productImage: b64 }));
                     }
                   }} className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" />
-                  
+
                   {editingItem.productImage ? (
                     <div className="flex items-center gap-3 w-full justify-between">
-                      <img src={editingItem.productImage} alt="Product" className="w-9 h-9 rounded-lg object-cover border border-sky-400" />
-                      <span className="text-xs font-bold text-sky-500 truncate flex-1 pl-1">ຕິດຮູບສິນຄ້າແລ້ວ ✓</span>
-                      <button type="button" onClick={() => setEditingItem((prev: any) => ({ ...prev, productImage: '' }))} className="text-rose-500 p-1">✕</button>
+                      <img src={editingItem.productImage} alt="Product" className="w-9 h-9 rounded-lg object-cover border border-[#4f0303]/15" />
+                      <span className="inline-flex items-center gap-1 text-xs font-bold text-[#4f0303] truncate flex-1 pl-1"><CheckCircle2 className="h-3.5 w-3.5 shrink-0" /> ຕິດຮູບສິນຄ້າແລ້ວ</span>
+                      <button type="button" onClick={() => setEditingItem((prev: any) => ({ ...prev, productImage: '' }))} className="text-[#4f0303] p-1"><X className="h-4 w-4" /></button>
                     </div>
                   ) : (
-                    <span className="text-xs text-sky-600 dark:text-sky-400 mx-auto flex items-center gap-1.5 font-bold">
+                    <span className="text-xs text-[#4f0303]  mx-auto flex items-center gap-1.5 font-bold">
                       <Upload className="w-3.5 h-3.5" /> ຄລິກ ຫຼື ວາງຮູບສິນຄ້າ (Ctrl+V)
                     </span>
                   )}
@@ -1383,18 +1383,18 @@ export default function Suppliers() {
               </div>
 
               {/* ໂໝດລາຄາ */}
-              <div className="grid grid-cols-2 gap-1.5 bg-slate-100 dark:bg-neutral-900 p-1 rounded-2xl">
+              <div className="grid grid-cols-2 gap-1.5 bg-[#f4f3f0]  p-1 rounded-2xl">
                 <button
                   type="button"
                   onClick={() => setEditingItem({ ...editingItem, priceMode: 'total' })}
-                  className={`py-2 text-xs font-bold rounded-xl cursor-pointer ${editingItem.priceMode === 'total' ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950 font-bold' : 'text-slate-400'}`}
+                  className={`py-2 text-xs font-bold rounded-xl cursor-pointer ${editingItem.priceMode === 'total' ? 'bg-[#4f0303] text-white   font-bold' : 'text-[#777777]'}`}
                 >
                   ລາຄາລວມ
                 </button>
                 <button
                   type="button"
                   onClick={() => setEditingItem({ ...editingItem, priceMode: 'per_pack' })}
-                  className={`py-2 text-xs font-bold rounded-xl cursor-pointer ${editingItem.priceMode === 'per_pack' ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950 font-bold' : 'text-slate-400'}`}
+                  className={`py-2 text-xs font-bold rounded-xl cursor-pointer ${editingItem.priceMode === 'per_pack' ? 'bg-[#4f0303] text-white   font-bold' : 'text-[#777777]'}`}
                 >
                   ຕໍ່ແພັກ
                 </button>
@@ -1476,9 +1476,9 @@ export default function Suppliers() {
               <div>
                 <label className="label-xs flex justify-between mb-1">
                   <span>ຮູບໃບບິນ (Receipt Attachment)</span>
-                  <span className="text-emerald-500 font-bold text-[9px]">Ctrl+V</span>
+                  <span className="text-[#4f0303] font-bold text-[9px]">Ctrl+V</span>
                 </label>
-                <div className="border border-dashed border-slate-300 dark:border-neutral-700 rounded-xl p-2 relative flex items-center justify-between">
+                <div className="border border-dashed border-[#e8e5e0]  rounded-xl p-2 relative flex items-center justify-between">
                   <input type="file" accept="image/*" onChange={async (e) => {
                     const file = e.target.files?.[0];
                     if (file) {
@@ -1488,12 +1488,12 @@ export default function Suppliers() {
                   }} className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" />
                   {editingItem.receiptImage ? (
                     <div className="flex items-center gap-2 w-full justify-between">
-                      <img src={editingItem.receiptImage} alt="Receipt" className="w-8 h-8 rounded-lg object-cover border border-neutral-700" />
-                      <span className="text-[11px] font-bold text-emerald-500 truncate flex-1 pl-1">ຕິດຮູບໃບບິນແລ້ວ ✓</span>
-                      <button type="button" onClick={() => setEditingItem((prev: any) => ({ ...prev, receiptImage: '' }))} className="text-rose-500 p-1">✕</button>
+                      <img src={editingItem.receiptImage} alt="Receipt" className="w-8 h-8 rounded-lg object-cover border border-[#e8e5e0]" />
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-[#4f0303] truncate flex-1 pl-1"><CheckCircle2 className="h-3 w-3 shrink-0" /> ຕິດຮູບໃບບິນແລ້ວ</span>
+                      <button type="button" onClick={() => setEditingItem((prev: any) => ({ ...prev, receiptImage: '' }))} className="text-[#4f0303] p-1"><X className="h-4 w-4" /></button>
                     </div>
                   ) : (
-                    <span className="text-xs text-slate-400 mx-auto flex items-center gap-1.5"><Upload className="w-3.5 h-3.5" /> ຄລິກ ຫຼື ວາງຮູບໃບບິນ</span>
+                    <span className="text-xs text-[#777777] mx-auto flex items-center gap-1.5"><Upload className="w-3.5 h-3.5" /> ຄລິກ ຫຼື ວາງຮູບໃບບິນ</span>
                   )}
                 </div>
               </div>
@@ -1508,8 +1508,8 @@ export default function Suppliers() {
                 />
               </div>
 
-              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-neutral-800">
-                <button type="button" onClick={() => setIsEditModalOpen(false)} className="px-4 py-2 rounded-xl border text-xs font-bold text-slate-400 cursor-pointer">ຍົກເລີກ</button>
+              <div className="flex justify-end gap-2 pt-2 border-t border-[#e8e5e0] ">
+                <button type="button" onClick={() => setIsEditModalOpen(false)} className="px-4 py-2 rounded-xl border text-xs font-bold text-[#777777] cursor-pointer">ຍົກເລີກ</button>
                 <button type="submit" disabled={saveLoading} className="crystal-button cursor-pointer">
                   {saveLoading ? 'Saving...' : 'ບັນທຶກການແກ້ໄຂ'}
                 </button>
@@ -1519,16 +1519,16 @@ export default function Suppliers() {
         </div>
       )}
 
-      {/* 📦 Modal: Add New Product */}
+      {/*  Modal: Add New Product */}
       {isAddProductModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setIsAddProductModalOpen(false)}>
-          <div className="bg-white dark:bg-[#141414] rounded-3xl p-6 border border-slate-200 dark:border-neutral-800 max-w-md w-full space-y-4" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center border-b border-slate-100 dark:border-neutral-800 pb-3">
-              <h3 className="text-sm font-serif text-slate-800 dark:text-white flex items-center gap-2">
-                <Package className="w-4 h-4 text-emerald-500" />
+          <div className="bg-white  rounded-3xl p-6 border border-[#e8e5e0]  max-w-md w-full space-y-4" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center border-b border-[#e8e5e0]  pb-3">
+              <h3 className="text-sm font-serif text-[#1a1a1a]  flex items-center gap-2">
+                <Package className="w-4 h-4 text-[#4f0303]" />
                 <span>ເພີ່ມສິນຄ້າໃໝ່ (New Product)</span>
               </h3>
-              <button onClick={() => setIsAddProductModalOpen(false)} className="text-slate-400 hover:text-white">✕</button>
+              <button onClick={() => setIsAddProductModalOpen(false)} className="text-[#777777] hover:text-[#4f0303]"><X className="h-4 w-4" /></button>
             </div>
 
             <form onSubmit={handleSaveNewProduct} className="space-y-4">
@@ -1550,21 +1550,21 @@ export default function Suppliers() {
                   <button
                     type="button"
                     onClick={() => setNewProductForm({ ...newProductForm, categoryType: 'COGS', unit: 'g' })}
-                    className={`p-2 rounded-xl text-xs font-bold border text-center cursor-pointer ${newProductForm.categoryType === 'COGS' ? 'bg-amber-500/10 border-amber-500 text-amber-500 font-bold' : 'border-neutral-800 text-slate-400'}`}
+                    className={`p-2 rounded-xl text-xs font-bold border text-center cursor-pointer ${newProductForm.categoryType === 'COGS' ? 'bg-[#4f0303]/10 border-[#4f0303]/15 text-[#4f0303] font-bold' : 'border-[#e8e5e0] text-[#777777]'}`}
                   >
                     COGS (ວັດຖຸດິບ)
                   </button>
                   <button
                     type="button"
                     onClick={() => setNewProductForm({ ...newProductForm, categoryType: 'EQUIPMENT', unit: 'pcs' })}
-                    className={`p-2 rounded-xl text-xs font-bold border text-center cursor-pointer ${newProductForm.categoryType === 'EQUIPMENT' ? 'bg-purple-500/10 border-purple-500 text-purple-500 font-bold' : 'border-neutral-800 text-slate-400'}`}
+                    className={`p-2 rounded-xl text-xs font-bold border text-center cursor-pointer ${newProductForm.categoryType === 'EQUIPMENT' ? 'bg-[#4f0303]/10 border-[#4f0303]/15 text-[#4f0303] font-bold' : 'border-[#e8e5e0] text-[#777777]'}`}
                   >
                     ອຸປະກອນ (CAPEX)
                   </button>
                   <button
                     type="button"
                     onClick={() => setNewProductForm({ ...newProductForm, categoryType: 'OPERATIONAL', unit: 'pack' })}
-                    className={`p-2 rounded-xl text-xs font-bold border text-center cursor-pointer ${newProductForm.categoryType === 'OPERATIONAL' ? 'bg-blue-500/10 border-blue-500 text-blue-500 font-bold' : 'border-neutral-800 text-slate-400'}`}
+                    className={`p-2 rounded-xl text-xs font-bold border text-center cursor-pointer ${newProductForm.categoryType === 'OPERATIONAL' ? 'bg-[#4f0303]/10 border-[#4f0303]/15 text-[#4f0303] font-bold' : 'border-[#e8e5e0] text-[#777777]'}`}
                   >
                     ດຳເນີນງານ (OPEX)
                   </button>
@@ -1602,35 +1602,35 @@ export default function Suppliers() {
               <div>
                 <label className="label-xs flex justify-between mb-1">
                   <span>ຮູບພາບສິນຄ້າ (Product Photo)</span>
-                  <span className="text-emerald-500 font-bold text-[9px]">Ctrl+V ວາງໄດ້</span>
+                  <span className="text-[#4f0303] font-bold text-[9px]">Ctrl+V ວາງໄດ້</span>
                 </label>
-                <div className="border border-dashed border-slate-300 dark:border-neutral-700 rounded-xl p-3 relative flex items-center justify-between">
-                  <input 
-                    type="file" 
-                    accept="image/*" 
+                <div className="border border-dashed border-[#e8e5e0]  rounded-xl p-3 relative flex items-center justify-between">
+                  <input
+                    type="file"
+                    accept="image/*"
                     onChange={async (e) => {
                       const file = e.target.files?.[0];
                       if (file) {
                         const b64 = await compressImage(file);
                         setNewProductForm(prev => ({ ...prev, productImage: b64 }));
                       }
-                    }} 
-                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" 
+                    }}
+                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
                   />
                   {newProductForm.productImage ? (
                     <div className="flex items-center gap-2 w-full justify-between">
-                      <img src={newProductForm.productImage} alt="Product" className="w-10 h-10 rounded-lg object-cover border border-neutral-700" />
-                      <span className="text-xs text-emerald-500 font-bold">ອັບໂຫຼດຮູບສິນຄ້າແລ້ວ ✓</span>
-                      <button type="button" onClick={() => setNewProductForm(prev => ({ ...prev, productImage: '' }))} className="text-rose-500 p-1">✕</button>
+                      <img src={newProductForm.productImage} alt="Product" className="w-10 h-10 rounded-lg object-cover border border-[#e8e5e0]" />
+                      <span className="inline-flex items-center gap-1 text-xs text-[#4f0303] font-bold"><CheckCircle2 className="h-3.5 w-3.5" /> ອັບໂຫຼດຮູບສິນຄ້າແລ້ວ</span>
+                      <button type="button" onClick={() => setNewProductForm(prev => ({ ...prev, productImage: '' }))} className="text-[#4f0303] p-1"><X className="h-4 w-4" /></button>
                     </div>
                   ) : (
-                    <span className="text-xs text-slate-400 mx-auto flex items-center gap-1.5"><ImageIcon className="w-3.5 h-3.5" /> ຄລິກເລືອກຮູບ ຫຼື ກົດ Ctrl+V</span>
+                    <span className="text-xs text-[#777777] mx-auto flex items-center gap-1.5"><ImageIcon className="w-3.5 h-3.5" /> ຄລິກເລືອກຮູບ ຫຼື ກົດ Ctrl+V</span>
                   )}
                 </div>
               </div>
 
-              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-neutral-800">
-                <button type="button" onClick={() => setIsAddProductModalOpen(false)} className="px-4 py-2 rounded-xl border text-xs font-bold text-slate-400">ຍົກເລີກ</button>
+              <div className="flex justify-end gap-2 pt-2 border-t border-[#e8e5e0] ">
+                <button type="button" onClick={() => setIsAddProductModalOpen(false)} className="px-4 py-2 rounded-xl border text-xs font-bold text-[#777777]">ຍົກເລີກ</button>
                 <button type="submit" className="crystal-button">ບັນທຶກສິນຄ້າ</button>
               </div>
             </form>
@@ -1641,25 +1641,25 @@ export default function Suppliers() {
       {/* In-App Alerts & Popups */}
       {appModal.isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm" onClick={() => setAppModal({ ...appModal, isOpen: false })}>
-          <div className="bg-white dark:bg-[#141414] rounded-3xl p-6 border border-slate-200 dark:border-neutral-800 max-w-md w-full space-y-4" onClick={e => e.stopPropagation()}>
-            <h3 className="text-sm font-serif text-slate-800 dark:text-white border-b border-neutral-800 pb-2">{appModal.title}</h3>
+          <div className="bg-white  rounded-3xl p-6 border border-[#e8e5e0]  max-w-md w-full space-y-4" onClick={e => e.stopPropagation()}>
+            <h3 className="text-sm font-serif text-[#1a1a1a]  border-b border-[#e8e5e0] pb-2">{appModal.title}</h3>
             {appModal.type === 'alert' && (
               <div className="space-y-4 text-xs">
-                <p className="text-slate-400">{appModal.data}</p>
+                <p className="text-[#777777]">{appModal.data}</p>
                 <button onClick={() => setAppModal({ ...appModal, isOpen: false })} className="crystal-button w-full">ເຂົ້າໃຈແລ້ວ</button>
               </div>
             )}
             {appModal.type === 'delete_quote' && (
               <div className="space-y-4 text-xs">
-                <p className="text-slate-300">ທ່ານແນ່ໃຈບໍ່ວ່າຕ້ອງການລຶບລາຍການລາຄານີ້ອອກຈາກລະບົບ?</p>
+                <p className="text-[#777777]">ທ່ານແນ່ໃຈບໍ່ວ່າຕ້ອງການລຶບລາຍການລາຄານີ້ອອກຈາກລະບົບ?</p>
                 <div className="flex gap-2">
-                  <button onClick={() => setAppModal({ ...appModal, isOpen: false })} className="flex-1 py-2.5 rounded-xl border text-slate-400 font-bold">ຍົກເລີກ</button>
-                  <button 
+                  <button onClick={() => setAppModal({ ...appModal, isOpen: false })} className="flex-1 py-2.5 rounded-xl border text-[#777777] font-bold">ຍົກເລີກ</button>
+                  <button
                     onClick={async () => {
                       if (appModal.data) await deleteDoc(doc(db, 'supplierPrices', appModal.data));
                       setAppModal({ ...appModal, isOpen: false });
-                    }} 
-                    className="flex-1 py-2.5 rounded-xl bg-rose-600 text-white font-bold"
+                    }}
+                    className="flex-1 py-2.5 rounded-xl bg-[#4f0303] text-white font-bold"
                   >
                     ລຶບທັນທີ
                   </button>

@@ -204,7 +204,7 @@ const POSReceiptModal = ({ bill, onClose }: PosReceiptModalProps) => {
                 <button
                   type="button"
                   onClick={() => window.print()}
-                  className="rounded-xl bg-[#4f0303] p-2 text-white transition hover:bg-[#6a0808]"
+                  className="rounded-xl bg-[#4f0303] p-2 text-white transition hover:bg-[#680404]"
                   aria-label="Print receipt"
                   title="Print receipt"
                 >
@@ -255,7 +255,7 @@ const POSReceiptModal = ({ bill, onClose }: PosReceiptModalProps) => {
                   </div>
                 </div>
 
-                <div className="my-4 border-t border-dotted border-neutral-300" />
+                <div className="my-4 border-t border-dotted border-[#e8e5e0]" />
 
                 <div className="grid grid-cols-[1fr_auto_auto] gap-3 pb-2 font-mono text-[9px] font-bold uppercase tracking-wider text-[#404040]">
                   <span>PURCHASED ITEMS</span>
@@ -302,7 +302,7 @@ const POSReceiptModal = ({ bill, onClose }: PosReceiptModalProps) => {
                   </p>
                 )}
 
-                <div className="my-4 border-t border-dotted border-neutral-300" />
+                <div className="my-4 border-t border-dotted border-[#e8e5e0]" />
 
                 <div className="space-y-1.5 font-mono text-[10px]">
                   <div className="flex justify-between text-[#404040]">
@@ -323,14 +323,14 @@ const POSReceiptModal = ({ bill, onClose }: PosReceiptModalProps) => {
                   </div>
                 </div>
 
-                <div className="my-4 border-t border-dotted border-neutral-300" />
+                <div className="my-4 border-t border-dotted border-[#e8e5e0]" />
 
                 <div className="space-y-1 font-mono text-[9px] text-[#404040]">
                   <div className="flex justify-between gap-2"><span>DATE / TIME</span><span className="text-right">{bill.date || ''} {bill.time || ''}</span></div>
                   <div className="flex justify-between gap-2"><span>BILL NO.</span><span>{billNo}</span></div>
                   <div className="flex justify-between gap-2"><span>CUSTOMER</span><span className="max-w-[65%] truncate text-right">{bill.customerName || 'Walk-in'}</span></div>
                   <div className="flex justify-between gap-2"><span>PAYMENT</span><span className="uppercase">{bill.paymentMethod || 'N/A'}</span></div>
-                  <div className="mt-2 flex items-center justify-center gap-1.5 border border-dotted border-neutral-300 py-1.5 font-sans text-[9px] font-bold">
+                  <div className="mt-2 flex items-center justify-center gap-1.5 border border-dotted border-[#e8e5e0] py-1.5 font-sans text-[9px] font-bold">
                     {isPaid
                       ? <CheckCircle2 className="h-3.5 w-3.5 text-[#4f0303]" />
                       : <Ban className="h-3.5 w-3.5 text-[#4f0303]" />}
@@ -370,8 +370,8 @@ const POSReceiptModal = ({ bill, onClose }: PosReceiptModalProps) => {
             </section>
 
             {showSettings && (
-              <aside className="receipt-print-controls w-full max-w-[340px] rounded-2xl border border-white/10 bg-white p-5 text-[#1a1a1a] shadow-2xl">
-                <div className="mb-4 flex items-center justify-between border-b border-neutral-200 pb-3">
+              <aside className="receipt-print-controls w-full max-w-[340px] rounded-2xl border border-[#e8e5e0] bg-white p-5 text-[#1a1a1a] shadow-2xl">
+                <div className="mb-4 flex items-center justify-between border-b border-[#e8e5e0] pb-3">
                   <h2 className="flex items-center gap-2 text-sm font-bold">
                     <SlidersHorizontal className="h-4 w-4 text-[#4f0303]" />
                     Receipt details
@@ -389,13 +389,13 @@ const POSReceiptModal = ({ bill, onClose }: PosReceiptModalProps) => {
                           value={settings[field.key]}
                           onChange={event => setSettings(current => ({ ...current, [field.key]: event.target.value }))}
                           rows={2}
-                          className="mt-1 w-full resize-y rounded-lg border border-neutral-300 bg-white px-3 py-2 text-xs font-normal normal-case tracking-normal text-[#1a1a1a] outline-none focus:border-[#4f0303]"
+                          className="mt-1 w-full resize-y rounded-lg border border-[#e8e5e0] bg-white px-3 py-2 text-xs font-normal normal-case tracking-normal text-[#1a1a1a] outline-none focus:border-[#4f0303]"
                         />
                       ) : (
                         <input
                           value={settings[field.key]}
                           onChange={event => setSettings(current => ({ ...current, [field.key]: event.target.value }))}
-                          className="mt-1 w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-xs font-normal normal-case tracking-normal text-[#1a1a1a] outline-none focus:border-[#4f0303]"
+                          className="mt-1 w-full rounded-lg border border-[#e8e5e0] bg-white px-3 py-2 text-xs font-normal normal-case tracking-normal text-[#1a1a1a] outline-none focus:border-[#4f0303]"
                         />
                       )}
                     </label>

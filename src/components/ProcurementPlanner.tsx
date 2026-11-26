@@ -5,7 +5,8 @@ import { useTranslation } from 'react-i18next';
 import { collection, onSnapshot, query } from 'firebase/firestore';
 import { 
   TrendingUp, Printer, Cpu, CheckCircle, Search, RotateCw, FileDown, 
-  ShoppingCart, Info, Sliders, Building, Check, Smartphone, AlertCircle, Trash2, Truck 
+  ShoppingCart, Info, Sliders, Building, Check, Smartphone, AlertCircle, Trash2, Truck,
+  X, Coffee
 } from 'lucide-react';
 
 const getSinglePackPriceLAK = (quote: any): number => {
@@ -172,15 +173,15 @@ export default function ProcurementPlanner() {
 
   return (
     <div className="space-y-6 font-sans">
-      <div className="bg-white dark:bg-slate-900 shadow-xl rounded-3xl p-6 lg:p-8 border border-slate-100 dark:border-white/5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+      <div className="bg-white  shadow-xl rounded-3xl p-6 lg:p-8 border border-[#e8e5e0]  flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <span className="bg-[#052659] text-white text-[9px] font-black px-2.5 py-1 rounded-full uppercase tracking-widest">
+          <span className="bg-[#4f0303] text-white text-[9px] font-black px-2.5 py-1 rounded-full uppercase tracking-widest">
             Le Ouve Procurement
           </span>
-          <h1 className="text-2xl md:text-3xl font-black text-slate-800 dark:text-white mt-2 leading-tight">
+          <h1 className="text-2xl md:text-3xl font-black text-[#1a1a1a]  mt-2 leading-tight">
             {i18n.language === 'la' ? 'ແຜນຈັດຊື້ & ບິນອັດຕະໂນມັດ' : 'Smart Procurement & Billing Optimization'}
           </h1>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+          <p className="text-xs text-[#666666]  mt-1">
             {i18n.language === 'la' ? 'ຄຳນວນເຕີມສາງອັດຕະໂນມັດ ພ້ອມແຍກບິນໄປຕາມຮ້ານຄ້າທີ່ຖືກທີ່ສຸດ' : 'Replenishment calculation cost-optimized across active suppliers.'}
           </p>
         </div>
@@ -188,7 +189,7 @@ export default function ProcurementPlanner() {
         <div className="flex gap-2">
           <button
             onClick={() => setOnlyExhaustion(!onlyExhaustion)}
-            className={`p-3 rounded-2xl border text-xs font-black flex items-center gap-2 cursor-pointer ${onlyExhaustion ? 'bg-rose-50 border-rose-200 text-rose-700' : 'bg-slate-100 text-slate-600'}`}
+            className={`p-3 rounded-2xl border text-xs font-black flex items-center gap-2 cursor-pointer ${onlyExhaustion ? 'bg-[#4f0303]/5 border-[#4f0303]/15 text-[#4f0303]' : 'bg-[#f4f3f0] text-[#666666]'}`}
           >
             <span>{onlyExhaustion ? 'Exhaustion Only: ON' : 'All Items'}</span>
           </button>
@@ -197,23 +198,23 @@ export default function ProcurementPlanner() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {supplierPurchaseGroups.map((bill, idx) => (
-          <div key={idx} className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-white/5 rounded-3xl p-6 shadow-lg flex flex-col justify-between space-y-4">
+          <div key={idx} className="bg-white  border border-[#e8e5e0]  rounded-3xl p-6 shadow-lg flex flex-col justify-between space-y-4">
             <div>
-              <div className="flex justify-between items-center border-b border-slate-100 dark:border-white/5 pb-3">
-                <h3 className="text-sm font-black uppercase text-[#052659] dark:text-white flex items-center gap-2">
-                  <Building className="w-4 h-4 text-emerald-500" />
+              <div className="flex justify-between items-center border-b border-[#e8e5e0]  pb-3">
+                <h3 className="text-sm font-black uppercase text-[#4f0303]  flex items-center gap-2">
+                  <Building className="w-4 h-4 text-[#4f0303]" />
                   {bill.supplier}
                 </h3>
-                <span className="text-xs font-mono font-black text-emerald-600">
+                <span className="text-xs font-mono font-black text-[#4f0303]">
                   {bill.totalCost.toLocaleString()} ₭
                 </span>
               </div>
 
               <div className="space-y-2 mt-4 max-h-40 overflow-y-auto">
                 {bill.items.map((it, i) => (
-                  <div key={i} className="flex justify-between items-center text-xs p-2 bg-slate-50 dark:bg-white/5 rounded-xl">
-                    <span className="font-bold text-slate-800 dark:text-white">{it.productName}</span>
-                    <span className="font-mono text-sky-500 font-bold">{it.packsToOrder} {it.buyUnit}</span>
+                  <div key={i} className="flex justify-between items-center text-xs p-2 bg-[#faf9f6]  rounded-xl">
+                    <span className="font-bold text-[#1a1a1a] ">{it.productName}</span>
+                    <span className="font-mono text-[#4f0303] font-bold">{it.packsToOrder} {it.buyUnit}</span>
                   </div>
                 ))}
               </div>
@@ -224,7 +225,7 @@ export default function ProcurementPlanner() {
                 setSelectedBill(bill);
                 setIsPrinterModalOpen(true);
               }}
-              className="w-full py-3 bg-[#052659] hover:bg-[#0c3a80] text-white text-xs font-black uppercase tracking-widest rounded-xl flex items-center justify-center gap-2 cursor-pointer"
+              className="w-full py-3 bg-[#4f0303] hover:bg-[#680404] text-white text-xs font-black uppercase tracking-widest rounded-xl flex items-center justify-center gap-2 cursor-pointer"
             >
               <Printer className="w-4 h-4" />
               <span>Print Thermal Voucher</span>
@@ -237,22 +238,22 @@ export default function ProcurementPlanner() {
       <AnimatePresence>
         {isPrinterModalOpen && selectedBill && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4 overflow-y-auto">
-            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-slate-900 border border-white/10 rounded-3xl p-6 max-w-sm w-full space-y-4">
-              <div className="flex justify-between items-center border-b border-white/10 pb-3 text-white">
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-white border border-[#e8e5e0] rounded-3xl p-6 max-w-sm w-full space-y-4">
+              <div className="flex justify-between items-center border-b border-[#e8e5e0] pb-3 text-[#1a1a1a]">
                 <h3 className="text-xs font-black uppercase tracking-wider">Thermal Receipt Preview</h3>
-                <button onClick={() => setIsPrinterModalOpen(false)} className="text-slate-400 hover:text-white">✕</button>
+                <button onClick={() => setIsPrinterModalOpen(false)} className="text-[#777777] hover:text-[#4f0303]"><X className="h-4 w-4" /></button>
               </div>
 
               {/* Thermal Voucher with Le Ouve Header */}
-              <div className="bg-[#faf7f0] text-slate-800 p-6 shadow-md border-t-8 border-dashed border-red-500/25 font-mono text-xs select-none">
+              <div className="bg-white text-[#1a1a1a] p-6 shadow-md border-t-8 border-dashed border-[#4f0303]/25 font-mono text-xs select-none">
                 <div className="text-center space-y-1">
-                  <h2 className="text-[14px] font-black tracking-tight uppercase leading-4 text-slate-900 font-sans">
-                    ☕ LE OUVE WORKSPACE
+                  <h2 className="text-[14px] font-black tracking-tight uppercase leading-4 text-[#1a1a1a] font-sans">
+                    <span className="inline-flex items-center gap-1 text-[#4f0303]"><Coffee className="h-4 w-4" /> LE OUVE WORKSPACE</span>
                   </h2>
-                  <p className="text-[9px] text-slate-500">Vientiane, Lao PDR</p>
-                  <p className="text-[9px] text-slate-400">--------------------------------</p>
+                  <p className="text-[9px] text-[#666666]">Vientiane, Lao PDR</p>
+                  <p className="text-[9px] text-[#777777]">--------------------------------</p>
                   <p className="text-[10px] font-black uppercase">SUPPLIER INVOICE</p>
-                  <p className="text-[9px] text-slate-400">--------------------------------</p>
+                  <p className="text-[9px] text-[#777777]">--------------------------------</p>
                 </div>
 
                 <div className="mt-3 space-y-1 text-[10px]">
@@ -260,7 +261,7 @@ export default function ProcurementPlanner() {
                   <div className="flex justify-between"><span>DATE:</span><span>{new Date().toLocaleDateString()}</span></div>
                 </div>
 
-                <div className="space-y-1 my-3 border-t border-b border-dashed border-slate-300 py-2">
+                <div className="space-y-1 my-3 border-t border-b border-dashed border-[#e8e5e0] py-2">
                   {selectedBill.items.map((it: any, i: number) => (
                     <div key={i} className="flex justify-between">
                       <span className="truncate max-w-[120px]">{it.productName}</span>
@@ -278,7 +279,7 @@ export default function ProcurementPlanner() {
 
               <button
                 onClick={() => window.print()}
-                className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black uppercase tracking-widest cursor-pointer"
+                className="w-full py-3 bg-[#4f0303] hover:bg-[#680404] text-white rounded-xl text-xs font-black uppercase tracking-widest cursor-pointer"
               >
                 Print to Device
               </button>

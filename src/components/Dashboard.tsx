@@ -1,10 +1,10 @@
 import { useState, useEffect, useMemo } from 'react';
-import { 
+import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   AreaChart, Area
 } from 'recharts';
-import { 
-  DollarSign, Percent, ShoppingBag, PieChart, TrendingUp
+import {
+  DollarSign, Percent, ShoppingBag, PieChart, TrendingUp, Circle
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { collection, query, onSnapshot } from 'firebase/firestore';
@@ -89,92 +89,92 @@ export default function Dashboard({ userSettings, user }: DashboardProps) {
 
   return (
     <div className="space-y-6 font-sans pb-16">
-      
-      {/* ✨ Header: ຮຽບຫຼູ ບໍ່ມີ LO ມາກວນຕາ */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white dark:bg-[#141414] p-6 rounded-3xl border border-slate-200/80 dark:border-neutral-800 shadow-xs">
+
+      {/*  Header: ຮຽບຫຼູ ບໍ່ມີ LO ມາກວນຕາ */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white  p-6 rounded-3xl border border-[#e8e5e0]/80  shadow-xs">
         <div>
-          <h2 className="text-2xl font-serif text-slate-800 dark:text-white">
+          <h2 className="text-2xl font-serif text-[#1a1a1a] ">
             {i18n.language === 'la' ? 'ພາບລວມການເງິນ & ຕົວຊີ້ວັດທຸລະກິດ' : 'Executive Business Overview'}
           </h2>
-          <p className="text-xs text-slate-400 mt-0.5">
+          <p className="text-xs text-[#777777] mt-0.5">
             {i18n.language === 'la' ? 'ວິເຄາະຍອດຂາຍ, ຕົ້ນທຶນ COGS, ກຳໄລສຸດທິ ແລະ ຜົນຕອບແທນ ROI' : 'Live analytics, revenue streams, purchasing cost and net profit margins'}
           </p>
         </div>
 
-        <span className="px-3 py-1 bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 rounded-full text-[9px] font-black uppercase tracking-wider border border-neutral-200 dark:border-neutral-700">
+        <span className="px-3 py-1 bg-[#f4f3f0]  text-[#666666]  rounded-full text-[9px] font-black uppercase tracking-wider border border-[#e8e5e0] ">
           Live Synced
         </span>
       </div>
 
-      {/* ✨ CARDS 5 ອັນແບບ Luxury Minimalist (ຕັດແຖບສີອອກໝົດ) */}
+      {/*  CARDS 5 ອັນແບບ Luxury Minimalist (ຕັດແຖບສີອອກໝົດ) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
-        
+
         {/* Total Revenue */}
         <div className="high-density-card p-5 space-y-2">
-          <div className="flex justify-between items-center text-slate-400">
+          <div className="flex justify-between items-center text-[#777777]">
             <span className="label-xs">{i18n.language === 'la' ? 'ຍອດຂາຍລວມ' : 'Total Revenue'}</span>
-            <DollarSign className="w-3.5 h-3.5 text-neutral-400" />
+            <DollarSign className="w-3.5 h-3.5 text-[#777777]" />
           </div>
-          <h3 className="text-2xl font-serif font-bold text-slate-900 dark:text-white">
+          <h3 className="text-2xl font-serif font-bold text-[#4f0303]">
             {financeKPIs.totalRevenue.toLocaleString()} <span className="text-xs font-normal opacity-70">₭</span>
           </h3>
-          <span className="text-[10px] text-slate-400 block font-light">
+          <span className="text-[10px] text-[#777777] block font-light">
             {i18n.language === 'la' ? 'ລາຍຮັບຈາກການຂາຍທັງໝົດ' : 'All sales inflows'}
           </span>
         </div>
 
         {/* COGS */}
         <div className="high-density-card p-5 space-y-2">
-          <div className="flex justify-between items-center text-slate-400">
+          <div className="flex justify-between items-center text-[#777777]">
             <span className="label-xs">{i18n.language === 'la' ? 'ຕົ້ນທຶນວັດຖຸດິບ (COGS)' : 'COGS / Purchasing'}</span>
-            <ShoppingBag className="w-3.5 h-3.5 text-neutral-400" />
+            <ShoppingBag className="w-3.5 h-3.5 text-[#777777]" />
           </div>
-          <h3 className="text-2xl font-serif font-bold text-slate-900 dark:text-white">
+          <h3 className="text-2xl font-serif font-bold text-[#1a1a1a] ">
             {financeKPIs.cogsPurchasing.toLocaleString()} <span className="text-xs font-normal opacity-70">₭</span>
           </h3>
-          <span className="text-[10px] text-slate-400 block font-light">
+          <span className="text-[10px] text-[#777777] block font-light">
             {i18n.language === 'la' ? 'ຄ່າຊື້ເຄື່ອງ & ວັດຖຸດິບ' : 'Raw materials procurement'}
           </span>
         </div>
 
         {/* Gross Margin % */}
         <div className="high-density-card p-5 space-y-2">
-          <div className="flex justify-between items-center text-slate-400">
+          <div className="flex justify-between items-center text-[#777777]">
             <span className="label-xs">{i18n.language === 'la' ? 'ອັດຕາກຳໄລຂັ້ນຕົ້ນ' : 'Gross Margin'}</span>
-            <Percent className="w-3.5 h-3.5 text-neutral-400" />
+            <Percent className="w-3.5 h-3.5 text-[#777777]" />
           </div>
-          <h3 className="text-2xl font-serif font-bold text-slate-900 dark:text-white">
+          <h3 className="text-2xl font-serif font-bold text-[#1a1a1a] ">
             {financeKPIs.grossMarginPercent.toFixed(1)}%
           </h3>
-          <span className="text-[10px] text-slate-400 block font-light">
+          <span className="text-[10px] text-[#777777] block font-light">
             {i18n.language === 'la' ? `ກຳໄລຂັ້ນຕົ້ນ: ${financeKPIs.grossProfit.toLocaleString()} ₭` : `Gross: ${financeKPIs.grossProfit.toLocaleString()} ₭`}
           </span>
         </div>
 
         {/* Net Profit */}
         <div className="high-density-card p-5 space-y-2">
-          <div className="flex justify-between items-center text-slate-400">
+          <div className="flex justify-between items-center text-[#777777]">
             <span className="label-xs">{i18n.language === 'la' ? 'ກຳໄລສຸດທິ (Net)' : 'Net Profit'}</span>
-            <TrendingUp className="w-3.5 h-3.5 text-neutral-400" />
+            <TrendingUp className="w-3.5 h-3.5 text-[#777777]" />
           </div>
-          <h3 className={`text-2xl font-serif font-bold ${financeKPIs.netProfit >= 0 ? 'text-slate-900 dark:text-white' : 'text-rose-500'}`}>
+          <h3 className={`text-2xl font-serif font-bold ${financeKPIs.netProfit >= 0 ? 'text-[#1a1a1a] ' : 'text-[#4f0303]'}`}>
             {financeKPIs.netProfit.toLocaleString()} <span className="text-xs font-normal opacity-70">₭</span>
           </h3>
-          <span className="text-[10px] text-slate-400 block font-light">
+          <span className="text-[10px] text-[#777777] block font-light">
             Net Margin: {financeKPIs.netMarginPercent.toFixed(1)}%
           </span>
         </div>
 
         {/* ROI % */}
         <div className="high-density-card p-5 space-y-2">
-          <div className="flex justify-between items-center text-slate-400">
+          <div className="flex justify-between items-center text-[#777777]">
             <span className="label-xs">{i18n.language === 'la' ? 'ຜົນຕອບແທນ (ROI)' : 'Return on Inv.'}</span>
-            <PieChart className="w-3.5 h-3.5 text-neutral-400" />
+            <PieChart className="w-3.5 h-3.5 text-[#777777]" />
           </div>
-          <h3 className={`text-2xl font-serif font-bold ${financeKPIs.roiPercent >= 0 ? 'text-slate-900 dark:text-white' : 'text-rose-500'}`}>
+          <h3 className={`text-2xl font-serif font-bold ${financeKPIs.roiPercent >= 0 ? 'text-[#1a1a1a] ' : 'text-[#4f0303]'}`}>
             {financeKPIs.roiPercent.toFixed(1)}%
           </h3>
-          <span className="text-[10px] text-slate-400 block font-light">
+          <span className="text-[10px] text-[#777777] block font-light">
             Performance Index
           </span>
         </div>
@@ -183,18 +183,18 @@ export default function Dashboard({ userSettings, user }: DashboardProps) {
 
       {/* Chart: Clean Minimalist Line */}
       <div className="high-density-card p-6 space-y-4">
-        <div className="flex justify-between items-center border-b border-slate-100 dark:border-neutral-800 pb-3">
+        <div className="flex justify-between items-center border-b border-[#e8e5e0]  pb-3">
           <div>
-            <h3 className="text-base font-serif text-slate-800 dark:text-white">
+            <h3 className="text-base font-serif text-[#1a1a1a] ">
               {i18n.language === 'la' ? 'ທ່າອ່ຽງລາຍຮັບ ທຽບກັບ ລາຍຈ່າຍ (7 ວັນ)' : 'Revenue vs Expense Flow (7 Days)'}
             </h3>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-[#777777]">
               {i18n.language === 'la' ? 'ການປຽບທຽບກະແສເງິນສົດເຂົ້າ-ອອກລາຍວັນ' : 'Cash inflows vs outflows comparison'}
             </p>
           </div>
           <div className="flex gap-4 text-xs font-mono font-medium">
-            <span className="text-emerald-500">● Revenue</span>
-            <span className="text-slate-400 dark:text-neutral-500">● Expenses</span>
+            <span className="inline-flex items-center gap-1 text-[#4f0303]"><Circle className="h-2 w-2 fill-current" /> Revenue</span>
+            <span className="inline-flex items-center gap-1 text-[#777777]"><Circle className="h-2 w-2 fill-current" /> Expenses</span>
           </div>
         </div>
 
@@ -203,27 +203,27 @@ export default function Dashboard({ userSettings, user }: DashboardProps) {
             <AreaChart data={chartData}>
               <defs>
                 <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#10b981" stopOpacity={0.15}/>
-                  <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                  <stop offset="5%" stopColor="#4f0303" stopOpacity={0.12}/>
+                  <stop offset="95%" stopColor="#4f0303" stopOpacity={0}/>
                 </linearGradient>
                 <linearGradient id="colorExp" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#737373" stopOpacity={0.15}/>
                   <stop offset="95%" stopColor="#737373" stopOpacity={0}/>
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#262626" opacity={0.15} />
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e8e5e0" />
               <XAxis dataKey="day" fontSize={11} axisLine={false} tickLine={false} />
               <YAxis fontSize={11} axisLine={false} tickLine={false} />
-              <Tooltip 
-                contentStyle={{ 
-                  backgroundColor: '#141414', 
-                  borderRadius: '12px', 
-                  border: '1px solid rgba(255,255,255,0.1)', 
-                  color: '#fff',
-                  fontSize: '11px' 
-                }} 
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: '#ffffff',
+                  borderRadius: '12px',
+                  border: '1px solid #e8e5e0',
+                  color: '#1a1a1a',
+                  fontSize: '11px'
+                }}
               />
-              <Area type="monotone" dataKey="Revenue" stroke="#10b981" fill="url(#colorRev)" strokeWidth={2} />
+              <Area type="monotone" dataKey="Revenue" stroke="#4f0303" fill="url(#colorRev)" strokeWidth={2} />
               <Area type="monotone" dataKey="Expenses" stroke="#737373" fill="url(#colorExp)" strokeWidth={2} />
             </AreaChart>
           </ResponsiveContainer>

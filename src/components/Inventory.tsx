@@ -1,16 +1,16 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { 
-  collection, onSnapshot, addDoc, setDoc, deleteDoc, doc, serverTimestamp, updateDoc 
+import {
+  collection, onSnapshot, addDoc, setDoc, deleteDoc, doc, serverTimestamp, updateDoc
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { useTranslation } from 'react-i18next';
 import POSReceiptModal from './PosReceiptModal';
-import { 
-  BookOpen, Plus, Trash2, Edit2, Calendar, 
+import {
+  BookOpen, Plus, Trash2, Edit2, Calendar,
   Package, ShoppingCart, Layers, Zap, Utensils, FileText,
   DollarSign, TrendingUp, Sparkles, Tag, Upload, X, Receipt,
-  Eye, User, Clock, Check, CheckCircle, Edit3, Gift, Search, ChevronDown, Copy
+  Eye, User, Clock, Check, CheckCircle, CheckCircle2, Edit3, Gift, Search, ChevronDown, Copy, Lightbulb
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -55,7 +55,7 @@ const getSinglePackPriceLAK = (quote: any): number => {
   return (quote.currency === 'LAK' ? totalOriginal : totalOriginal * exchangeRate) / Number(quote.quantity || 1);
 };
 
-// 🍼 Bottle Gauge ສຳລັບຫົວໜ່ວຍ ml
+//  Bottle Gauge ສຳລັບຫົວໜ່ວຍ ml
 const BottleGauge = ({ currentMl, packSize = 1000 }: { currentMl: number; packSize?: number }) => {
   const cap = packSize > 0 ? packSize : 1000;
   const activeBottleMl = currentMl <= 0 ? 0 : (currentMl % cap === 0 ? cap : currentMl % cap);
@@ -63,25 +63,25 @@ const BottleGauge = ({ currentMl, packSize = 1000 }: { currentMl: number; packSi
   const fullBottles = currentMl > 0 ? Math.floor(currentMl / cap) : 0;
 
   return (
-    <div className="flex items-center gap-2.5 p-2 bg-slate-50 dark:bg-[#1a1a1a] rounded-2xl border border-slate-200/70 dark:border-neutral-800">
+    <div className="flex items-center gap-2.5 p-2 bg-[#faf9f6]  rounded-2xl border border-[#e8e5e0]/70 ">
       <div className="relative w-6 h-12 flex items-end justify-center shrink-0">
-        <svg viewBox="0 2 32 64" className="w-6 h-12 text-slate-300 dark:text-neutral-700">
+        <svg viewBox="0 2 32 64" className="w-6 h-12 text-[#777777] ">
           <rect x="11" y="2" width="10" height="5" rx="1.5" fill="currentColor" opacity="0.8" />
           <rect x="12" y="7" width="8" height="8" fill="none" stroke="currentColor" strokeWidth="2" />
           <path d="M 12 15 C 6 18 4 22 4 28 L 4 58 C 4 61 7 62 10 62 L 22 62 C 25 62 28 61 28 58 L 28 28 C 28 22 26 18 20 15 Z" fill="none" stroke="currentColor" strokeWidth="2" />
         </svg>
-        <div 
-          className="absolute bottom-1 w-4 rounded-b-md bg-gradient-to-t from-sky-500 to-sky-400 transition-all duration-700" 
+        <div
+          className="absolute bottom-1 w-4 rounded-b-md bg-gradient-to-t from-[#4f0303] to-[#4f0303] transition-all duration-700"
           style={{ height: `${Math.max(3, (percent * 34) / 100)}px` }}
         />
       </div>
 
       <div className="flex flex-col text-left">
         <div className="flex items-center gap-1">
-          <span className="text-xs font-black font-mono text-sky-500">{percent}%</span>
-          <span className="text-[9px] text-slate-400 font-bold">({activeBottleMl.toLocaleString()} ml)</span>
+          <span className="text-xs font-black font-mono text-[#4f0303]">{percent}%</span>
+          <span className="text-[9px] text-[#777777] font-bold">({activeBottleMl.toLocaleString()} ml)</span>
         </div>
-        <span className="text-[9px] text-slate-400 mt-0.5">
+        <span className="text-[9px] text-[#777777] mt-0.5">
           {fullBottles > 0 ? `+${fullBottles} ຂວດເຕັມ` : `ເຫຼືອໃນຂວດ`}
         </span>
       </div>
@@ -89,7 +89,7 @@ const BottleGauge = ({ currentMl, packSize = 1000 }: { currentMl: number; packSi
   );
 };
 
-// 🌟 Searchable Select Component ສຳລັບເລືອກວັດຖຸດິບໃນສູດຂະໜົມ
+//  Searchable Select Component ສຳລັບເລືອກວັດຖຸດິບໃນສູດຂະໜົມ
 const SearchableIngredientSelect = ({
   options,
   value,
@@ -141,43 +141,43 @@ const SearchableIngredientSelect = ({
         onClick={() => setIsOpen(!isOpen)}
         className="crystal-input w-full font-bold !py-2 text-xs flex items-center justify-between text-left cursor-pointer min-h-[38px]"
       >
-        <span className="truncate flex-1 mr-2 text-slate-800 dark:text-white">
+        <span className="truncate flex-1 mr-2 text-[#1a1a1a] ">
           {selectedOpt ? (
             <>
-              <span className="text-slate-900 dark:text-white font-bold">{selectedOpt.name}</span>
-              <span className="text-[11px] text-slate-400 font-mono ml-1.5">
+              <span className="text-[#1a1a1a]  font-bold">{selectedOpt.name}</span>
+              <span className="text-[11px] text-[#777777] font-mono ml-1.5">
                 • {selectedOpt.supplier} ({Math.round(selectedOpt.unitCostLAK).toLocaleString()} ₭/{selectedOpt.unit})
               </span>
             </>
           ) : (
-            <span className="text-slate-400 font-normal">{placeholder}</span>
+            <span className="text-[#777777] font-normal">{placeholder}</span>
           )}
         </span>
-        <ChevronDown className={`w-3.5 h-3.5 text-slate-400 shrink-0 transition-transform ${isOpen ? 'rotate-180 text-sky-500' : ''}`} />
+        <ChevronDown className={`w-3.5 h-3.5 text-[#777777] shrink-0 transition-transform ${isOpen ? 'rotate-180 text-[#4f0303]' : ''}`} />
       </button>
 
       {isOpen && (
-        <div className="absolute top-full left-0 z-50 w-full mt-1 bg-white dark:bg-[#141414] border border-slate-200 dark:border-neutral-800 rounded-2xl shadow-2xl overflow-hidden">
-          <div className="p-2 border-b border-slate-100 dark:border-neutral-800 bg-slate-50 dark:bg-[#1c1c1c] flex items-center gap-2">
-            <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+        <div className="absolute top-full left-0 z-50 w-full mt-1 bg-white  border border-[#e8e5e0]  rounded-2xl shadow-2xl overflow-hidden">
+          <div className="p-2 border-b border-[#e8e5e0]  bg-[#faf9f6]  flex items-center gap-2">
+            <Search className="w-3.5 h-3.5 text-[#777777] shrink-0" />
             <input
               ref={inputRef}
               type="text"
               value={queryText}
               onChange={e => setQueryText(e.target.value)}
               placeholder="ພິມຊື່ວັດຖຸດິບ ຫຼື ຊື່ຮ້ານ..."
-              className="w-full bg-transparent text-xs text-slate-800 dark:text-white focus:outline-none font-medium"
+              className="w-full bg-transparent text-xs text-[#1a1a1a]  focus:outline-none font-medium"
             />
             {queryText && (
-              <button type="button" onClick={() => setQueryText('')} className="text-slate-400 hover:text-white">
+              <button type="button" onClick={() => setQueryText('')} className="text-[#777777] hover:text-[#4f0303]">
                 <X className="w-3.5 h-3.5" />
               </button>
             )}
           </div>
 
-          <div className="max-h-56 overflow-y-auto divide-y divide-slate-100 dark:divide-neutral-850 p-1">
+          <div className="max-h-56 overflow-y-auto divide-y divide-[#e8e5e0]  p-1">
             {filtered.length === 0 ? (
-              <div className="py-5 text-center text-slate-400 text-xs">ບໍ່ພົບວັດຖຸດິບ "{queryText}"</div>
+              <div className="py-5 text-center text-[#777777] text-xs">ບໍ່ພົບວັດຖຸດິບ "{queryText}"</div>
             ) : (
               filtered.map(opt => {
                 const optVal = `${opt.productId}_${opt.supplier}`;
@@ -190,18 +190,18 @@ const SearchableIngredientSelect = ({
                       setIsOpen(false);
                     }}
                     className={`px-3 py-2 rounded-xl flex items-center justify-between cursor-pointer transition-colors ${
-                      isSelected 
-                        ? 'bg-sky-500/10 text-sky-500 font-bold' 
-                        : 'hover:bg-slate-100 dark:hover:bg-neutral-800 text-slate-700 dark:text-neutral-200'
+                      isSelected
+                        ? 'bg-[#4f0303]/10 text-[#4f0303] font-bold'
+                        : 'hover:bg-[#f4f3f0]  text-[#1a1a1a] '
                     }`}
                   >
                     <div className="flex items-center gap-2 truncate">
                       <span className="font-bold truncate">{opt.name}</span>
-                      <span className="text-[10px] text-slate-400 font-mono">
+                      <span className="text-[10px] text-[#777777] font-mono">
                         • {opt.supplier} ({Math.round(opt.unitCostLAK).toLocaleString()} ₭/{opt.unit})
                       </span>
                     </div>
-                    {isSelected && <Check className="w-3.5 h-3.5 text-sky-500 shrink-0" />}
+                    {isSelected && <Check className="w-3.5 h-3.5 text-[#4f0303] shrink-0" />}
                   </div>
                 );
               })
@@ -226,7 +226,7 @@ interface RecipeIngredientRow {
 export default function Inventory() {
   const { i18n } = useTranslation();
   const [subTab, setSubTab] = useState<'sales' | 'recipes' | 'balances'>('sales');
-  
+
   const [products, setProducts] = useState<any[]>([]);
   const [supplierPrices, setSupplierPrices] = useState<any[]>([]);
   const [recipes, setRecipes] = useState<any[]>([]);
@@ -258,7 +258,7 @@ export default function Inventory() {
   const [orderPaymentMethod, setOrderPaymentMethod] = useState<'onepay' | 'cash' | 'ldb'>('onepay');
   const [activeViewingBill, setActiveViewingBill] = useState<any | null>(null);
 
-  // 🌟 ແກ້ໄຂບິນ POS & ເຄຍບິນ POS States
+  //  ແກ້ໄຂບິນ POS & ເຄຍບິນ POS States
   const [editingPosBill, setEditingPosBill] = useState<any | null>(null);
   const [settlingPosBill, setSettlingPosBill] = useState<any | null>(null);
   const [settlingSlip, setSettlingSlip] = useState<string>('');
@@ -296,7 +296,7 @@ export default function Inventory() {
     const unsubAdj = onSnapshot(collection(db, 'inventory'), snap => {
       setAdjustments(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     }, err => handleFirestoreError(err, OperationType.LIST, 'inventory'));
-    
+
     const unsubBills = onSnapshot(collection(db, 'pos_bills'), snap => {
       const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       data.sort((a: any, b: any) => {
@@ -372,8 +372,8 @@ export default function Inventory() {
 
       if (!map.has(key)) {
         const rate = sp.currency === 'LAK' ? 1 : (Number(sp.exchangeRate) || 1);
-        const singlePackLAK = (sp.priceMode === 'total' 
-          ? (Number(sp.priceOriginal || 0) / (Number(sp.quantity) || 1)) 
+        const singlePackLAK = (sp.priceMode === 'total'
+          ? (Number(sp.priceOriginal || 0) / (Number(sp.quantity) || 1))
           : Number(sp.priceOriginal || 0)) * rate;
         const packSize = Number(sp.quantityPerUnit) || pr?.packSize || 1000;
         const unitCostLAK = singlePackLAK / (packSize || 1);
@@ -414,7 +414,7 @@ export default function Inventory() {
       const parsedIngredients = (recipe.ingredients || []).map((ing: any) => {
         if (!ing) return null;
         const pr = products.find(p => p.id === ing.productId);
-        
+
         let unitCost = Number(ing.unitCostLAK) || 0;
         if (unitCost === 0 && ing.productId) {
           const mOpt = supplierProductOptions.find(o => o.productId === ing.productId);
@@ -610,15 +610,15 @@ export default function Inventory() {
     const netProfit = price > 0 ? price - totalCostPerUnit : 0;
     const margin = price > 0 ? (netProfit / price) * 100 : 0;
 
-    return { 
-      totalBatchRaw: isNaN(totalBatchRaw) ? 0 : totalBatchRaw, 
-      yieldCount, 
-      rawPerUnit: isNaN(rawPerUnit) ? 0 : rawPerUnit, 
-      overhead, 
-      totalCostPerUnit: isNaN(totalCostPerUnit) ? 0 : totalCostPerUnit, 
-      price, 
-      netProfit: isNaN(netProfit) ? 0 : netProfit, 
-      margin: isNaN(margin) ? 0 : margin 
+    return {
+      totalBatchRaw: isNaN(totalBatchRaw) ? 0 : totalBatchRaw,
+      yieldCount,
+      rawPerUnit: isNaN(rawPerUnit) ? 0 : rawPerUnit,
+      overhead,
+      totalCostPerUnit: isNaN(totalCostPerUnit) ? 0 : totalCostPerUnit,
+      price,
+      netProfit: isNaN(netProfit) ? 0 : netProfit,
+      margin: isNaN(margin) ? 0 : margin
     };
   }, [recipeIngredients, batchYield, overheadCost, sellingPrice]);
 
@@ -718,7 +718,7 @@ export default function Inventory() {
     }
   };
 
-  // 🌟 ແກ້ໄຂຈຳນວນໃນ Edit Modal ແບບ Real-time (ບໍ່ມີເລກ 9 ກັບມາເລກ 1)
+  //  ແກ້ໄຂຈຳນວນໃນ Edit Modal ແບບ Real-time (ບໍ່ມີເລກ 9 ກັບມາເລກ 1)
   const handleUpdateEditItemQty = (idx: number, delta: number) => {
     if (!editingPosBill || !editingPosBill.items) return;
     const updatedItems = editingPosBill.items.map((item: any, i: number) => {
@@ -886,17 +886,17 @@ export default function Inventory() {
 
   return (
     <div className="space-y-6 font-sans pb-16">
-      
+
       {/* Header Banner */}
-      <div className="flex flex-col lg:flex-row justify-between lg:items-center gap-4 p-6 bg-white dark:bg-[#141414] rounded-3xl border border-slate-200/80 dark:border-neutral-800 shadow-sm">
+      <div className="flex flex-col lg:flex-row justify-between lg:items-center gap-4 p-6 bg-white  rounded-3xl border border-[#e8e5e0]/80  shadow-sm">
         <div>
-          <span className="bg-[#052659] dark:bg-white dark:text-neutral-950 text-white text-[9px] font-black px-2.5 py-1 rounded-full uppercase tracking-widest">
+          <span className="bg-[#4f0303]   text-white text-[9px] font-black px-2.5 py-1 rounded-full uppercase tracking-widest">
             Le Ouve POS & Recipe Engine
           </span>
-          <h1 className="text-2xl md:text-3xl font-serif text-slate-800 dark:text-white mt-1">
+          <h1 className="text-2xl md:text-3xl font-serif text-[#1a1a1a]  mt-1">
             ສູດຄຸກກີ້, ເຂົ້າໜົມ & ລະບົບອອກບິນ POS
           </h1>
-          <p className="text-xs text-slate-400 mt-0.5">
+          <p className="text-xs text-[#777777] mt-0.5">
             ອອກໃບບິນແຍກຕາມລູກຄ້າ, ສົ່ງເຂົ້າໜີ້ຕ້ອງຮັບ (AR), ແກ້ໄຂບິນ ແລະ ເຄຍບິນຂຶ້ນ Dashboard
           </p>
         </div>
@@ -927,23 +927,23 @@ export default function Inventory() {
       <div className="flex gap-2">
         <button
           onClick={() => setSubTab('sales')}
-          className={`px-4 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${subTab === 'sales' ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950' : 'bg-white dark:bg-[#141414] border border-slate-200 dark:border-neutral-800 text-slate-400'}`}
+          className={`px-4 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${subTab === 'sales' ? 'bg-[#4f0303] text-white  ' : 'bg-white  border border-[#e8e5e0]  text-[#777777]'}`}
         >
           <Receipt className="w-3.5 h-3.5" />
           <span>ອອກບິນ POS & ປະຫວັດໃບບິນ</span>
           {posBills.filter(b => b.status === 'pending').length > 0 && (
-            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+            <span className="w-2 h-2 rounded-full bg-[#4f0303] animate-pulse"></span>
           )}
         </button>
         <button
           onClick={() => setSubTab('recipes')}
-          className={`px-4 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer ${subTab === 'recipes' ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950' : 'bg-white dark:bg-[#141414] border border-slate-200 dark:border-neutral-800 text-slate-400'}`}
+          className={`px-4 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer ${subTab === 'recipes' ? 'bg-[#4f0303] text-white  ' : 'bg-white  border border-[#e8e5e0]  text-[#777777]'}`}
         >
           ສູດທັງໝົດ (Recipes & Costing)
         </button>
         <button
           onClick={() => setSubTab('balances')}
-          className={`px-4 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer ${subTab === 'balances' ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950' : 'bg-white dark:bg-[#141414] border border-slate-200 dark:border-neutral-800 text-slate-400'}`}
+          className={`px-4 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer ${subTab === 'balances' ? 'bg-[#4f0303] text-white  ' : 'bg-white  border border-[#e8e5e0]  text-[#777777]'}`}
         >
           ຍອດຄັງສາງ (ຂວດ ml)
         </button>
@@ -953,17 +953,17 @@ export default function Inventory() {
       {subTab === 'sales' && (
         <div className="space-y-6">
           <div className="high-density-card p-6 space-y-4">
-            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 border-b border-slate-100 dark:border-neutral-800 pb-3">
+            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 border-b border-[#e8e5e0]  pb-3">
               <div>
-                <h3 className="text-base font-serif text-slate-800 dark:text-white flex items-center gap-2">
-                  <User className="w-4 h-4 text-sky-500" />
+                <h3 className="text-base font-serif text-[#1a1a1a]  flex items-center gap-2">
+                  <User className="w-4 h-4 text-[#4f0303]" />
                   <span>ອອກໃບບິນ POS ຕາມລູກຄ້າ / ອໍເດີ້ (New POS Order)</span>
                 </h3>
-                <p className="text-xs text-slate-400 mt-0.5">ໃສ່ຊື່ລູກຄ້າ, ໝາຍເຫດ ແລະ ກົດຈຳນວນສິນຄ້າດ້ານລຸ່ມ (ຍອດຈະແລ່ນເຂົ້າ AR ໜີ້ຕ້ອງຮັບ)</p>
+                <p className="text-xs text-[#777777] mt-0.5">ໃສ່ຊື່ລູກຄ້າ, ໝາຍເຫດ ແລະ ກົດຈຳນວນສິນຄ້າດ້ານລຸ່ມ (ຍອດຈະແລ່ນເຂົ້າ AR ໜີ້ຕ້ອງຮັບ)</p>
               </div>
 
               <div className="flex items-center gap-2">
-                <Calendar className="w-4 h-4 text-slate-400" />
+                <Calendar className="w-4 h-4 text-[#777777]" />
                 <input
                   type="date"
                   value={selectedDate}
@@ -1005,7 +1005,7 @@ export default function Inventory() {
                       type="button"
                       onClick={() => setOrderPaymentMethod(m)}
                       className={`py-2 text-[10px] font-bold rounded-xl border uppercase cursor-pointer transition-all ${
-                        orderPaymentMethod === m ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950 border-transparent shadow-xs' : 'border-slate-200 dark:border-neutral-800 text-slate-400'
+                        orderPaymentMethod === m ? 'bg-[#4f0303] text-white   border-transparent shadow-xs' : 'border-[#e8e5e0]  text-[#777777]'
                       }`}
                     >
                       {m}
@@ -1027,30 +1027,30 @@ export default function Inventory() {
                   <div>
                     <div className="flex items-center gap-3">
                       {rec.recipeImage ? (
-                        <img src={rec.recipeImage} alt={rec.menuName} className="w-14 h-14 rounded-2xl object-cover border border-neutral-700 shrink-0" />
+                        <img src={rec.recipeImage} alt={rec.menuName} className="w-14 h-14 rounded-2xl object-cover border border-[#e8e5e0] shrink-0" />
                       ) : (
-                        <div className="w-14 h-14 rounded-2xl bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center text-slate-400 shrink-0">
+                        <div className="w-14 h-14 rounded-2xl bg-[#f4f3f0]  flex items-center justify-center text-[#777777] shrink-0">
                           <Package className="w-6 h-6" />
                         </div>
                       )}
 
                       <div className="flex-1 min-w-0">
-                        <h4 className="text-sm font-bold text-slate-800 dark:text-white truncate">{rec.menuName}</h4>
-                        <span className="text-xs font-mono font-bold text-sky-500 block mt-0.5">
+                        <h4 className="text-sm font-bold text-[#1a1a1a]  truncate">{rec.menuName}</h4>
+                        <span className="text-xs font-mono font-bold text-[#4f0303] block mt-0.5">
                           {Number(rec.sellingPrice).toLocaleString()} ₭
                         </span>
-                        <span className="text-[10px] text-slate-400 block font-light">
+                        <span className="text-[10px] text-[#777777] block font-light">
                           (ຕົ້ນທຶນ: {Math.round(rec.totalCostPerUnit).toLocaleString()} ₭)
                         </span>
                       </div>
                     </div>
 
-                    <div className="mt-4 p-3 rounded-2xl bg-slate-50 dark:bg-[#1a1a1a] flex items-center justify-between">
-                      <span className="text-xs font-bold text-slate-700 dark:text-neutral-300">ຈຳນວນອໍເດີ້:</span>
+                    <div className="mt-4 p-3 rounded-2xl bg-[#faf9f6]  flex items-center justify-between">
+                      <span className="text-xs font-bold text-[#1a1a1a] ">ຈຳນວນອໍເດີ້:</span>
                       <div className="flex items-center gap-2">
-                        <button 
-                          onClick={() => setQuantitiesSold(prev => ({ ...prev, [rec.id]: Math.max(0, (prev[rec.id] || 0) - 1) }))} 
-                          className="w-8 h-8 rounded-xl bg-slate-200 dark:bg-neutral-800 font-bold cursor-pointer"
+                        <button
+                          onClick={() => setQuantitiesSold(prev => ({ ...prev, [rec.id]: Math.max(0, (prev[rec.id] || 0) - 1) }))}
+                          className="w-8 h-8 rounded-xl bg-[#f4f3f0]  font-bold cursor-pointer"
                         >
                           -
                         </button>
@@ -1059,11 +1059,11 @@ export default function Inventory() {
                           min="0"
                           value={quantitiesSold[rec.id] || 0}
                           onChange={(e) => setQuantitiesSold(prev => ({ ...prev, [rec.id]: parseInt(e.target.value) || 0 }))}
-                          className="w-14 py-1 font-bold text-center border rounded-xl dark:bg-black/30 text-sm font-mono"
+                          className="w-14 py-1 font-bold text-center border rounded-xl  text-sm font-mono"
                         />
-                        <button 
-                          onClick={() => setQuantitiesSold(prev => ({ ...prev, [rec.id]: (prev[rec.id] || 0) + 1 }))} 
-                          className="w-8 h-8 rounded-xl bg-slate-200 dark:bg-neutral-800 font-bold cursor-pointer"
+                        <button
+                          onClick={() => setQuantitiesSold(prev => ({ ...prev, [rec.id]: (prev[rec.id] || 0) + 1 }))}
+                          className="w-8 h-8 rounded-xl bg-[#f4f3f0]  font-bold cursor-pointer"
                         >
                           +
                         </button>
@@ -1071,7 +1071,7 @@ export default function Inventory() {
                     </div>
 
                     {qtySold > 0 && (
-                      <div className="mt-2 text-xs font-mono flex justify-between text-sky-500 pt-1">
+                      <div className="mt-2 text-xs font-mono flex justify-between text-[#4f0303] pt-1">
                         <span>ລວມລາຍການນີ້:</span>
                         <span className="font-bold">+{totalItemRevenue.toLocaleString()} ₭</span>
                       </div>
@@ -1083,12 +1083,12 @@ export default function Inventory() {
           </div>
 
           {/* Issue Bill Button */}
-          <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 p-5 rounded-3xl bg-neutral-100 dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800">
+          <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 p-5 rounded-3xl bg-[#f4f3f0]  border border-[#e8e5e0] ">
             <div>
-              <p className="text-xs font-bold text-slate-800 dark:text-white">
-                ອໍເດີ້ລູກຄ້າ: <span className="text-sky-500">{customerName || 'ລູກຄ້າທົ່ວໄປ'}</span> {orderNote && `(${orderNote})`}
+              <p className="text-xs font-bold text-[#1a1a1a] ">
+                ອໍເດີ້ລູກຄ້າ: <span className="text-[#4f0303]">{customerName || 'ລູກຄ້າທົ່ວໄປ'}</span> {orderNote && `(${orderNote})`}
               </p>
-              <p className="text-[10px] text-slate-400">
+              <p className="text-[10px] text-[#777777]">
                 ລວມ {Object.values(quantitiesSold).reduce((a, b) => a + b, 0)} ລາຍການ • ສົ່ງເຂົ້າ ໜີ້ຕ້ອງຮັບ (AR) • ຊຳລະຜ່ານ {orderPaymentMethod.toUpperCase()}
               </p>
             </div>
@@ -1105,35 +1105,35 @@ export default function Inventory() {
 
           {/* POS Bills Archive */}
           <div className="high-density-card p-6 overflow-hidden space-y-4">
-            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 border-b border-slate-100 dark:border-neutral-800 pb-3">
+            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 border-b border-[#e8e5e0]  pb-3">
               <div>
-                <h3 className="text-sm font-serif text-slate-800 dark:text-white flex items-center gap-2">
-                  <Receipt className="w-4 h-4 text-emerald-500" />
+                <h3 className="text-sm font-serif text-[#1a1a1a]  flex items-center gap-2">
+                  <Receipt className="w-4 h-4 text-[#4f0303]" />
                   <span>ປະຫວັດໃບບິນ POS ({posBills.length} ໃບບິນ)</span>
                 </h3>
-                <p className="text-xs text-slate-400">ກົດໄອຄອນຕາເພື່ອເບິ່ງບິນ • ກົດໄອຄອນສໍເພື່ອແກ້ໄຂ • ກົດ "ເຄຍບິນ" ເມື່ອລູກຄ້າຊຳລະແລ້ວ</p>
+                <p className="text-xs text-[#777777]">ກົດໄອຄອນຕາເພື່ອເບິ່ງບິນ • ກົດໄອຄອນສໍເພື່ອແກ້ໄຂ • ກົດ "ເຄຍບິນ" ເມື່ອລູກຄ້າຊຳລະແລ້ວ</p>
               </div>
 
               {/* Status Filter */}
-              <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-neutral-900 p-1 rounded-2xl text-xs font-bold">
+              <div className="flex items-center gap-1.5 bg-[#f4f3f0]  p-1 rounded-2xl text-xs font-bold">
                 <button
                   onClick={() => setBillFilter('all')}
-                  className={`px-3 py-1 rounded-xl cursor-pointer ${billFilter === 'all' ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950' : 'text-slate-400'}`}
+                  className={`px-3 py-1 rounded-xl cursor-pointer ${billFilter === 'all' ? 'bg-[#4f0303] text-white  ' : 'text-[#777777]'}`}
                 >
                   ທັງໝົດ
                 </button>
                 <button
                   onClick={() => setBillFilter('pending')}
-                  className={`px-3 py-1 rounded-xl cursor-pointer flex items-center gap-1 ${billFilter === 'pending' ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950' : 'text-slate-400'}`}
+                  className={`px-3 py-1 rounded-xl cursor-pointer flex items-center gap-1 ${billFilter === 'pending' ? 'bg-[#4f0303] text-white  ' : 'text-[#777777]'}`}
                 >
-                  <Clock className="w-3 h-3 text-amber-500" />
+                  <Clock className="w-3 h-3 text-[#4f0303]" />
                   <span>ລໍຖ້າເຄຍ ({posBills.filter(b => b.status === 'pending').length})</span>
                 </button>
                 <button
                   onClick={() => setBillFilter('settled')}
-                  className={`px-3 py-1 rounded-xl cursor-pointer flex items-center gap-1 ${billFilter === 'settled' ? 'bg-[#052659] text-white dark:bg-white dark:text-neutral-950' : 'text-slate-400'}`}
+                  className={`px-3 py-1 rounded-xl cursor-pointer flex items-center gap-1 ${billFilter === 'settled' ? 'bg-[#4f0303] text-white  ' : 'text-[#777777]'}`}
                 >
-                  <CheckCircle className="w-3 h-3 text-emerald-500" />
+                  <CheckCircle className="w-3 h-3 text-[#4f0303]" />
                   <span>ເຄຍແລ້ວ</span>
                 </button>
               </div>
@@ -1141,7 +1141,7 @@ export default function Inventory() {
 
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50 dark:bg-neutral-900/60 text-[10px] font-black uppercase text-slate-400">
+                <thead className="bg-[#faf9f6]  text-[10px] font-black uppercase text-[#777777]">
                   <tr>
                     <th className="p-3">ເລກບິນ & ເວລາ</th>
                     <th className="p-3">ຊື່ລູກຄ້າ / ໂຕະ</th>
@@ -1152,57 +1152,57 @@ export default function Inventory() {
                     <th className="p-3 text-center">ຈັດການ / ເຄຍບິນ</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-neutral-800">
+                <tbody className="divide-y divide-[#e8e5e0] ">
                   {filteredPosBills.map(bill => {
                     const isPending = bill.status === 'pending';
                     return (
-                      <tr key={bill.id} className="hover:bg-slate-50/50 dark:hover:bg-neutral-800/30">
+                      <tr key={bill.id} className="hover:bg-[#f4f3f0]/50 ">
                         <td className="p-3 whitespace-nowrap">
-                          <span className="font-mono font-bold text-slate-800 dark:text-white block">{bill.billNo}</span>
-                          <span className="text-[10px] text-slate-400 font-mono">{bill.date} • {bill.time}</span>
+                          <span className="font-mono font-bold text-[#1a1a1a]  block">{bill.billNo}</span>
+                          <span className="text-[10px] text-[#777777] font-mono">{bill.date} • {bill.time}</span>
                         </td>
-                        <td className="p-3 font-bold text-slate-800 dark:text-white">{bill.customerName}</td>
-                        <td className="p-3 text-slate-500 dark:text-neutral-400 italic text-[11px]">{bill.orderNote || '-'}</td>
+                        <td className="p-3 font-bold text-[#1a1a1a] ">{bill.customerName}</td>
+                        <td className="p-3 text-[#666666]  italic text-[11px]">{bill.orderNote || '-'}</td>
                         <td className="p-3 text-center font-mono font-bold">{bill.totalQty}</td>
-                        
+
                         {/* Status Badge */}
                         <td className="p-3 text-center whitespace-nowrap">
                           <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase font-mono ${
-                            isPending ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20' : 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'
+                            isPending ? 'bg-[#4f0303]/10 text-[#4f0303] border border-[#4f0303]/20' : 'bg-[#4f0303]/10 text-[#4f0303] border border-[#4f0303]/20'
                           }`}>
-                            {isPending ? 'ລໍຖ້າຊຳລະ (AR)' : 'ເຄຍແລ້ວ ✓'}
+                            {isPending ? 'ລໍຖ້າຊຳລະ (AR)' : <span className="inline-flex items-center gap-1"><CheckCircle2 className="h-3 w-3" />ເຄຍແລ້ວ</span>}
                           </span>
                         </td>
 
-                        <td className="p-3 text-right font-mono font-black text-emerald-500 text-sm whitespace-nowrap">
+                        <td className="p-3 text-right font-mono font-black text-[#4f0303] text-sm whitespace-nowrap">
                           {(bill.actualRevenue || bill.totalRevenue).toLocaleString()} ₭
                         </td>
-                        
-                        {/* 🛠️ Action Buttons */}
+
+                        {/*  Action Buttons */}
                         <td className="p-3 text-center">
                           <div className="flex items-center justify-center gap-1.5">
                             <button
                               onClick={() => setActiveViewingBill(bill)}
-                              className="p-1.5 rounded-lg bg-sky-500/10 hover:bg-sky-500/20 text-sky-500 cursor-pointer transition-colors"
+                              className="p-1.5 rounded-lg bg-[#4f0303]/10 hover:bg-[#680404]/20 text-[#4f0303] cursor-pointer transition-colors"
                               title="ເບິ່ງໃບບິນ POS"
                             >
                               <Eye className="w-3.5 h-3.5" />
                             </button>
 
-                            {/* ✏️ ປຸ່ມແກ້ໄຂບິນ POS */}
+                            {/*  ປຸ່ມແກ້ໄຂບິນ POS */}
                             <button
                               onClick={() => setEditingPosBill(bill)}
-                              className="p-1.5 rounded-lg bg-slate-100 dark:bg-neutral-800 hover:bg-slate-200 dark:hover:bg-neutral-700 text-slate-400 hover:text-white cursor-pointer transition-colors"
+                              className="p-1.5 rounded-lg bg-[#f4f3f0]  hover:bg-[#f4f3f0]  text-[#777777] hover:text-[#4f0303] cursor-pointer transition-colors"
                               title="ແກ້ໄຂບິນ POS"
                             >
                               <Edit3 className="w-3.5 h-3.5" />
                             </button>
 
-                            {/* ⚡ ປຸ່ມເຄຍບິນ POS */}
+                            {/*  ປຸ່ມເຄຍບິນ POS */}
                             {isPending ? (
                               <button
                                 onClick={() => handleOpenSettleModal(bill)}
-                                className="px-2.5 py-1 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-[10px] flex items-center gap-1 cursor-pointer shadow-xs"
+                                className="px-2.5 py-1 rounded-lg bg-[#4f0303] hover:bg-[#680404] text-white font-bold text-[10px] flex items-center gap-1 cursor-pointer shadow-xs"
                                 title="ເຄຍບິນ & ຮັບເງິນ"
                               >
                                 <CheckCircle className="w-3 h-3" />
@@ -1210,7 +1210,7 @@ export default function Inventory() {
                               </button>
                             ) : (
                               bill.receiptImage && (
-                                <span className="text-[10px] text-emerald-500 font-mono font-bold">✓ ມີສະລິບ</span>
+                                <span className="inline-flex items-center gap-1 text-[10px] text-[#4f0303] font-mono font-bold"><CheckCircle2 className="h-3 w-3" /> ມີສະລິບ</span>
                               )
                             )}
 
@@ -1222,7 +1222,7 @@ export default function Inventory() {
                                   if (bill.debtId) await deleteDoc(doc(db, 'debts', bill.debtId));
                                 }
                               }}
-                              className="p-1.5 text-slate-400 hover:text-rose-500 cursor-pointer"
+                              className="p-1.5 text-[#777777] hover:text-[#4f0303] cursor-pointer"
                               title="ລຶບ"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
@@ -1234,7 +1234,7 @@ export default function Inventory() {
                   })}
                   {filteredPosBills.length === 0 && (
                     <tr>
-                      <td colSpan={7} className="py-8 text-center text-slate-400 italic">
+                      <td colSpan={7} className="py-8 text-center text-[#777777] italic">
                         ບໍ່ພົບລາຍການໃບບິນ POS ຕາມເງື່ອນໄຂ
                       </td>
                     </tr>
@@ -1252,47 +1252,47 @@ export default function Inventory() {
           {recipesWithCalculatedCosts.map((recipe) => (
             <div key={recipe.id} className="high-density-card p-6 flex flex-col justify-between space-y-4">
               <div>
-                <div className="flex items-start gap-3 border-b border-slate-100 dark:border-neutral-800 pb-3">
+                <div className="flex items-start gap-3 border-b border-[#e8e5e0]  pb-3">
                   {recipe.recipeImage ? (
-                    <img src={recipe.recipeImage} alt={recipe.menuName} className="w-14 h-14 rounded-2xl object-cover border border-neutral-700 shadow-sm shrink-0" />
+                    <img src={recipe.recipeImage} alt={recipe.menuName} className="w-14 h-14 rounded-2xl object-cover border border-[#e8e5e0] shadow-sm shrink-0" />
                   ) : (
-                    <div className="w-14 h-14 rounded-2xl bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center text-slate-400 shrink-0">
+                    <div className="w-14 h-14 rounded-2xl bg-[#f4f3f0]  flex items-center justify-center text-[#777777] shrink-0">
                       <Package className="w-6 h-6" />
                     </div>
                   )}
 
                   <div className="flex-1 min-w-0">
-                    <h4 className="text-base font-serif text-slate-800 dark:text-white truncate">{recipe.menuName}</h4>
-                    <span className="text-[10px] text-slate-400 font-mono block">
+                    <h4 className="text-base font-serif text-[#1a1a1a]  truncate">{recipe.menuName}</h4>
+                    <span className="text-[10px] text-[#777777] font-mono block">
                       1 ສູດ = {recipe.batchYield} ຫົວໜ່ວຍ/ກ່ອງ
                     </span>
-                    <span className="text-xs font-mono font-bold text-sky-500 block mt-0.5">
+                    <span className="text-xs font-mono font-bold text-[#4f0303] block mt-0.5">
                       ຂາຍ: {Number(recipe.sellingPrice).toLocaleString()} ₭
                     </span>
                   </div>
 
                   <div className="text-right shrink-0">
-                    <span className="text-sm font-black font-mono text-emerald-500 block">
+                    <span className="text-sm font-black font-mono text-[#4f0303] block">
                       {Math.round(recipe.totalCostPerUnit).toLocaleString()} ₭
                     </span>
-                    <span className="text-[9px] text-slate-400 block font-normal">ຕົ້ນທຶນ/ຫົວໜ່ວຍ</span>
+                    <span className="text-[9px] text-[#777777] block font-normal">ຕົ້ນທຶນ/ຫົວໜ່ວຍ</span>
                   </div>
                 </div>
 
-                <div className="mt-3 p-3 rounded-2xl bg-slate-50 dark:bg-[#1a1a1a] text-xs space-y-1 font-mono">
-                  <div className="flex justify-between text-slate-500">
+                <div className="mt-3 p-3 rounded-2xl bg-[#faf9f6]  text-xs space-y-1 font-mono">
+                  <div className="flex justify-between text-[#666666]">
                     <span>ວັດຖຸດິບຕໍ່ຫົວໜ່ວຍ ({Math.round(recipe.totalBatchRawCost).toLocaleString()} ÷ {recipe.batchYield}):</span>
                     <span>{Math.round(recipe.rawCostPerUnit).toLocaleString()} ₭</span>
                   </div>
-                  <div className="flex justify-between text-slate-500">
+                  <div className="flex justify-between text-[#666666]">
                     <span>+ ຄ່າໄຟ-ນ້ຳຕໍ່ຫົວໜ່ວຍ:</span>
                     <span>+{Math.round(recipe.overheadCost).toLocaleString()} ₭</span>
                   </div>
-                  
+
                   {recipe.sellingPrice > 0 && (
-                    <div className="border-t border-slate-200 dark:border-neutral-800 pt-1 flex justify-between items-center text-xs font-bold">
-                      <span className="text-slate-700 dark:text-neutral-200">ກຳໄລຕໍ່ຫົວໜ່ວຍ:</span>
-                      <span className={`font-black ${recipe.netProfitPerUnit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                    <div className="border-t border-[#e8e5e0]  pt-1 flex justify-between items-center text-xs font-bold">
+                      <span className="text-[#1a1a1a] ">ກຳໄລຕໍ່ຫົວໜ່ວຍ:</span>
+                      <span className={`font-black ${recipe.netProfitPerUnit >= 0 ? 'text-[#4f0303]' : 'text-[#4f0303]'}`}>
                         +{Math.round(recipe.netProfitPerUnit).toLocaleString()} ₭ ({recipe.profitMarginPercent.toFixed(1)}%)
                       </span>
                     </div>
@@ -1300,23 +1300,23 @@ export default function Inventory() {
                 </div>
 
                 {recipe.pricingNote && (
-                  <div className="mt-2.5 p-3 rounded-2xl bg-emerald-500/5 dark:bg-emerald-500/10 border border-emerald-500/15 text-xs">
-                    <span className="text-[9px] font-bold uppercase text-emerald-600 dark:text-emerald-400 block">💡 Note ການຕັ້ງລາຄາ:</span>
-                    <p className="text-slate-600 dark:text-neutral-300 font-light mt-0.5">{recipe.pricingNote}</p>
+                  <div className="mt-2.5 p-3 rounded-2xl bg-[#4f0303]/5  border border-[#4f0303]/15 text-xs">
+                    <span className="flex items-center gap-1 text-[9px] font-bold uppercase text-[#4f0303]"><Lightbulb className="h-3 w-3" /> Note ການຕັ້ງລາຄາ:</span>
+                    <p className="text-[#666666]  font-light mt-0.5">{recipe.pricingNote}</p>
                   </div>
                 )}
                 {recipe.note && (
-                  <div className="mt-2 p-3 rounded-2xl bg-amber-500/5 dark:bg-amber-500/10 border border-amber-500/15 text-xs">
-                    <span className="text-[9px] font-bold uppercase text-amber-600 dark:text-amber-400 block">📝 Note ວິທີເຮັດ:</span>
-                    <p className="text-slate-600 dark:text-neutral-300 font-light mt-0.5">{recipe.note}</p>
+                  <div className="mt-2 p-3 rounded-2xl bg-[#4f0303]/5  border border-[#4f0303]/15 text-xs">
+                    <span className="flex items-center gap-1 text-[9px] font-bold uppercase text-[#4f0303]"><FileText className="h-3 w-3" /> Note ວິທີເຮັດ:</span>
+                    <p className="text-[#666666]  font-light mt-0.5">{recipe.note}</p>
                   </div>
                 )}
               </div>
 
-              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-neutral-800">
+              <div className="flex justify-end gap-2 pt-3 border-t border-[#e8e5e0] ">
                 <button
                   onClick={() => handleDuplicateRecipe(recipe)}
-                  className="p-2 text-slate-400 hover:text-emerald-500 rounded-lg cursor-pointer"
+                  className="p-2 text-[#777777] hover:text-[#4f0303] rounded-lg cursor-pointer"
                   title="Duplicate Recipe"
                 >
                   <Copy className="w-4 h-4" />
@@ -1331,7 +1331,7 @@ export default function Inventory() {
                     setRecipeImage(recipe.recipeImage || '');
                     setPricingNote(recipe.pricingNote || '');
                     setNote(recipe.note || '');
-                    
+
                     const safeIngredients = (recipe.ingredients || []).map((ing: any) => {
                       if (!ing) return null;
                       const pr = products.find(p => p.id === ing.productId);
@@ -1357,14 +1357,14 @@ export default function Inventory() {
                     ]);
                     setIsRecipeModalOpen(true);
                   }}
-                  className="p-2 text-slate-400 hover:text-sky-500 rounded-lg cursor-pointer"
+                  className="p-2 text-[#777777] hover:text-[#4f0303] rounded-lg cursor-pointer"
                   title="ແກ້ໄຂສູດ"
                 >
                   <Edit2 className="w-4 h-4" />
                 </button>
                 <button
                   onClick={() => deleteDoc(doc(db, 'recipes', recipe.id))}
-                  className="p-2 text-slate-400 hover:text-rose-500 rounded-lg cursor-pointer"
+                  className="p-2 text-[#777777] hover:text-[#4f0303] rounded-lg cursor-pointer"
                   title="ລຶບສູດ"
                 >
                   <Trash2 className="w-4 h-4" />
@@ -1378,14 +1378,14 @@ export default function Inventory() {
       {/* TAB 3: INVENTORY BALANCES */}
       {subTab === 'balances' && (
         <div className="high-density-card p-6 overflow-hidden space-y-4">
-          <div className="border-b border-neutral-800 pb-3">
-            <h3 className="text-sm font-serif text-slate-800 dark:text-white">ຍອດຄັງສາງຄົງເຫຼືອທັງໝົດ</h3>
-            <p className="text-xs text-slate-400">ຕັດສາງຕາມອັດຕາສ່ວນຂາຍ (ຈຳນວນຂາຍ ÷ Yield) × ວັດຖຸດິບຕໍ່ເຕົາ</p>
+          <div className="border-b border-[#e8e5e0] pb-3">
+            <h3 className="text-sm font-serif text-[#1a1a1a] ">ຍອດຄັງສາງຄົງເຫຼືອທັງໝົດ</h3>
+            <p className="text-xs text-[#777777]">ຕັດສາງຕາມອັດຕາສ່ວນຂາຍ (ຈຳນວນຂາຍ ÷ Yield) × ວັດຖຸດິບຕໍ່ເຕົາ</p>
           </div>
 
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50 dark:bg-neutral-900/60 text-[10px] font-black uppercase text-slate-400">
+              <thead className="bg-[#faf9f6]  text-[10px] font-black uppercase text-[#777777]">
                 <tr>
                   <th className="p-3">ສິນຄ້າ</th>
                   <th className="p-3">ສະຖານະຂວດນ້ຳ (ml & %)</th>
@@ -1394,18 +1394,18 @@ export default function Inventory() {
                   <th className="p-3 text-center">ຍອດເຫຼືອຕົວຈິງ</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-neutral-800">
+              <tbody className="divide-y divide-[#e8e5e0] ">
                 {inventoryBalances.map(item => {
                   const isLiquid = item.unit === 'ml' || item.unitLabel === 'ml';
 
                   return (
-                    <tr key={item.id} className="hover:bg-slate-50/50 dark:hover:bg-neutral-800/30">
-                      <td className="p-3 font-bold text-slate-800 dark:text-white">
+                    <tr key={item.id} className="hover:bg-[#f4f3f0]/50 ">
+                      <td className="p-3 font-bold text-[#1a1a1a] ">
                         <div className="flex items-center gap-2">
                           {item.productImage ? (
-                            <img src={item.productImage} alt={item.name} className="w-8 h-8 rounded-lg object-cover border border-neutral-700" />
+                            <img src={item.productImage} alt={item.name} className="w-8 h-8 rounded-lg object-cover border border-[#e8e5e0]" />
                           ) : (
-                            <div className="w-8 h-8 rounded-lg bg-neutral-200 dark:bg-neutral-800 flex items-center justify-center text-slate-400">
+                            <div className="w-8 h-8 rounded-lg bg-[#f4f3f0]  flex items-center justify-center text-[#777777]">
                               <Package className="w-4 h-4" />
                             </div>
                           )}
@@ -1417,13 +1417,13 @@ export default function Inventory() {
                         {isLiquid ? (
                           <BottleGauge currentMl={item.finalBalance} packSize={item.packSize || 1000} />
                         ) : (
-                          <span className="text-slate-400 font-mono">-</span>
+                          <span className="text-[#777777] font-mono">-</span>
                         )}
                       </td>
 
-                      <td className="p-3 text-center font-mono text-slate-500">{item.totalIn.toLocaleString()} {item.unit || item.unitLabel}</td>
-                      <td className="p-3 text-center font-mono text-rose-500">-{Math.round(item.totalConsumed).toLocaleString()} {item.unit || item.unitLabel}</td>
-                      <td className="p-3 text-center font-mono font-black text-emerald-500 text-sm">
+                      <td className="p-3 text-center font-mono text-[#666666]">{item.totalIn.toLocaleString()} {item.unit || item.unitLabel}</td>
+                      <td className="p-3 text-center font-mono text-[#4f0303]">-{Math.round(item.totalConsumed).toLocaleString()} {item.unit || item.unitLabel}</td>
+                      <td className="p-3 text-center font-mono font-black text-[#4f0303] text-sm">
                         {Math.round(item.finalBalance).toLocaleString()} {item.unit || item.unitLabel}
                       </td>
                     </tr>
@@ -1435,22 +1435,22 @@ export default function Inventory() {
         </div>
       )}
 
-      {/* ✏️ MODAL: ແກ້ໄຂບິນ POS (ປັບ Stepper Button + ຄຳນວນຍອດລວມໃໝ່) */}
+      {/*  MODAL: ແກ້ໄຂບິນ POS (ປັບ Stepper Button + ຄຳນວນຍອດລວມໃໝ່) */}
       <AnimatePresence>
         {editingPosBill && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setEditingPosBill(null)}>
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.95 }} 
-              animate={{ opacity: 1, scale: 1 }} 
-              className="bg-white dark:bg-[#141414] rounded-3xl p-6 border border-slate-200 dark:border-neutral-800 max-w-lg w-full space-y-4 max-h-[90vh] overflow-y-auto"
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="bg-white  rounded-3xl p-6 border border-[#e8e5e0]  max-w-lg w-full space-y-4 max-h-[90vh] overflow-y-auto"
               onClick={e => e.stopPropagation()}
             >
-              <div className="flex justify-between items-center border-b border-slate-100 dark:border-neutral-800 pb-3">
-                <h3 className="text-base font-serif text-slate-800 dark:text-white flex items-center gap-2">
-                  <Edit3 className="w-4 h-4 text-sky-500" />
+              <div className="flex justify-between items-center border-b border-[#e8e5e0]  pb-3">
+                <h3 className="text-base font-serif text-[#1a1a1a]  flex items-center gap-2">
+                  <Edit3 className="w-4 h-4 text-[#4f0303]" />
                   <span>ແກ້ໄຂບິນ POS #{editingPosBill.billNo}</span>
                 </h3>
-                <button onClick={() => setEditingPosBill(null)} className="text-slate-400 hover:text-white cursor-pointer">✕</button>
+                <button onClick={() => setEditingPosBill(null)} className="text-[#777777] hover:text-[#4f0303] cursor-pointer"><X className="h-4 w-4" /></button>
               </div>
 
               <form onSubmit={handleSaveEditedPosBill} className="space-y-4 text-xs">
@@ -1475,26 +1475,26 @@ export default function Inventory() {
                   />
                 </div>
 
-                <div className="border border-slate-200 dark:border-neutral-800 rounded-2xl p-3 bg-slate-50 dark:bg-[#1c1c1c] space-y-2">
-                  <span className="label-xs block text-slate-500">ລາຍການເມນູໃນບິນ</span>
+                <div className="border border-[#e8e5e0]  rounded-2xl p-3 bg-[#faf9f6]  space-y-2">
+                  <span className="label-xs block text-[#666666]">ລາຍການເມນູໃນບິນ</span>
                   {editingPosBill.items?.map((it: any, idx: number) => {
                     const currentQty = Number(it.soldQty || it.producedQty || 1);
                     const lineTotal = currentQty * (Number(it.sellingPrice) || 0);
 
                     return (
-                      <div key={idx} className="flex justify-between items-center gap-2 pt-2 border-t border-slate-200 dark:border-neutral-800 first:border-0 first:pt-0">
-                        <span className="font-bold text-slate-800 dark:text-white flex-1 truncate">{it.menuName}</span>
-                        
-                        {/* 🌟 Stepper Buttons: ແກ້ບັນຫາເລກ 9 ກັບມາ 1 */}
-                        <div className="flex items-center gap-1.5 bg-white dark:bg-black/40 p-1 rounded-xl border border-slate-200 dark:border-neutral-700">
+                      <div key={idx} className="flex justify-between items-center gap-2 pt-2 border-t border-[#e8e5e0]  first:border-0 first:pt-0">
+                        <span className="font-bold text-[#1a1a1a]  flex-1 truncate">{it.menuName}</span>
+
+                        {/*  Stepper Buttons: ແກ້ບັນຫາເລກ 9 ກັບມາ 1 */}
+                        <div className="flex items-center gap-1.5 bg-white  p-1 rounded-xl border border-[#e8e5e0] ">
                           <button
                             type="button"
                             onClick={() => handleUpdateEditItemQty(idx, -1)}
-                            className="w-6 h-6 rounded-lg bg-slate-100 dark:bg-neutral-800 text-slate-700 dark:text-neutral-200 font-bold hover:bg-slate-200 flex items-center justify-center cursor-pointer"
+                            className="w-6 h-6 rounded-lg bg-[#f4f3f0]  text-[#1a1a1a]  font-bold hover:bg-[#f4f3f0] flex items-center justify-center cursor-pointer"
                           >
                             -
                           </button>
-                          
+
                           <input
                             type="number"
                             min="1"
@@ -1506,13 +1506,13 @@ export default function Inventory() {
                           <button
                             type="button"
                             onClick={() => handleUpdateEditItemQty(idx, 1)}
-                            className="w-6 h-6 rounded-lg bg-slate-100 dark:bg-neutral-800 text-slate-700 dark:text-neutral-200 font-bold hover:bg-slate-200 flex items-center justify-center cursor-pointer"
+                            className="w-6 h-6 rounded-lg bg-[#f4f3f0]  text-[#1a1a1a]  font-bold hover:bg-[#f4f3f0] flex items-center justify-center cursor-pointer"
                           >
                             +
                           </button>
                         </div>
 
-                        <span className="w-24 text-right font-mono font-bold text-emerald-500">
+                        <span className="w-24 text-right font-mono font-bold text-[#4f0303]">
                           {lineTotal.toLocaleString()} ₭
                         </span>
                       </div>
@@ -1520,16 +1520,16 @@ export default function Inventory() {
                   })}
                 </div>
 
-                {/* 🌟 ຍອດລວມໃໝ່ຄຳນວນ Real-time */}
-                <div className="flex justify-between items-center p-3.5 rounded-2xl bg-slate-100 dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 font-mono">
-                  <span className="text-xs text-slate-500 font-bold">ຍອດລວມໃໝ່:</span>
-                  <span className="text-lg font-bold text-emerald-500">
+                {/*  ຍອດລວມໃໝ່ຄຳນວນ Real-time */}
+                <div className="flex justify-between items-center p-3.5 rounded-2xl bg-[#f4f3f0]  border border-[#e8e5e0]  font-mono">
+                  <span className="text-xs text-[#666666] font-bold">ຍອດລວມໃໝ່:</span>
+                  <span className="text-lg font-bold text-[#4f0303]">
                     {Number(editingPosBill.totalRevenue || 0).toLocaleString()} ₭
                   </span>
                 </div>
 
-                <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-neutral-800">
-                  <button type="button" onClick={() => setEditingPosBill(null)} className="px-4 py-2 rounded-xl border text-xs font-bold text-slate-400 cursor-pointer">
+                <div className="flex justify-end gap-2 pt-2 border-t border-[#e8e5e0] ">
+                  <button type="button" onClick={() => setEditingPosBill(null)} className="px-4 py-2 rounded-xl border text-xs font-bold text-[#777777] cursor-pointer">
                     ຍົກເລີກ
                   </button>
                   <button type="submit" className="crystal-button cursor-pointer">
@@ -1542,41 +1542,41 @@ export default function Inventory() {
         )}
       </AnimatePresence>
 
-      {/* ⚡ MODAL: ເຄຍບິນ POS */}
+      {/*  MODAL: ເຄຍບິນ POS */}
       <AnimatePresence>
         {settlingPosBill && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm" onClick={() => setSettlingPosBill(null)}>
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.95 }} 
-              animate={{ opacity: 1, scale: 1 }} 
-              className="bg-white dark:bg-[#141414] rounded-3xl p-6 border border-slate-200 dark:border-neutral-800 max-w-lg w-full space-y-4 max-h-[92vh] overflow-y-auto"
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="bg-white  rounded-3xl p-6 border border-[#e8e5e0]  max-w-lg w-full space-y-4 max-h-[92vh] overflow-y-auto"
               onClick={e => e.stopPropagation()}
             >
-              <div className="flex justify-between items-center border-b border-slate-100 dark:border-neutral-800 pb-3">
+              <div className="flex justify-between items-center border-b border-[#e8e5e0]  pb-3">
                 <div>
-                  <h3 className="text-base font-serif text-slate-800 dark:text-white flex items-center gap-2">
-                    <CheckCircle className="w-4 h-4 text-emerald-500" />
+                  <h3 className="text-base font-serif text-[#1a1a1a]  flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-[#4f0303]" />
                     <span>ເຄຍບິນ POS #{settlingPosBill.billNo}</span>
                   </h3>
-                  <p className="text-[10px] text-slate-400 mt-0.5">
-                    ລູກຄ້າ: <strong className="text-slate-800 dark:text-white">{settlingPosBill.customerName}</strong> • ເມື່ອກົດເຄຍ ຍອດຂາຍຈະຂຶ້ນ Dashboard ທັນທີ!
+                  <p className="text-[10px] text-[#777777] mt-0.5">
+                    ລູກຄ້າ: <strong className="text-[#1a1a1a] ">{settlingPosBill.customerName}</strong> • ເມື່ອກົດເຄຍ ຍອດຂາຍຈະຂຶ້ນ Dashboard ທັນທີ!
                   </p>
                 </div>
-                <button onClick={() => setSettlingPosBill(null)} className="text-slate-400 hover:text-white">✕</button>
+                <button onClick={() => setSettlingPosBill(null)} className="text-[#777777] hover:text-[#4f0303]"><X className="h-4 w-4" /></button>
               </div>
 
               <div className="space-y-3 text-xs">
-                <div className="border border-slate-200 dark:border-neutral-800 rounded-2xl p-3 bg-slate-50 dark:bg-[#1c1c1c] space-y-3">
-                  <span className="label-xs block text-slate-700 dark:text-neutral-300">ກວດສອບ: ຂາຍຈິງ vs ຊິມເອງ / ແຖມ</span>
+                <div className="border border-[#e8e5e0]  rounded-2xl p-3 bg-[#faf9f6]  space-y-3">
+                  <span className="label-xs block text-[#1a1a1a] ">ກວດສອບ: ຂາຍຈິງ vs ຊິມເອງ / ແຖມ</span>
                   {settlingItems.map((it: any, idx: number) => (
-                    <div key={idx} className="space-y-1.5 pt-2 border-t border-slate-200 dark:border-neutral-800 first:border-0 first:pt-0">
-                      <div className="flex justify-between font-bold text-slate-800 dark:text-white">
+                    <div key={idx} className="space-y-1.5 pt-2 border-t border-[#e8e5e0]  first:border-0 first:pt-0">
+                      <div className="flex justify-between font-bold text-[#1a1a1a] ">
                         <span>{it.menuName}</span>
-                        <span className="font-mono text-slate-400">@{Number(it.sellingPrice).toLocaleString()} ₭</span>
+                        <span className="font-mono text-[#777777]">@{Number(it.sellingPrice).toLocaleString()} ₭</span>
                       </div>
                       <div className="grid grid-cols-2 gap-2">
-                        <div className="p-2 bg-white dark:bg-[#141414] rounded-xl flex items-center justify-between border border-slate-200 dark:border-neutral-800">
-                          <span className="text-emerald-500 font-bold text-[11px] flex items-center gap-1">
+                        <div className="p-2 bg-white  rounded-xl flex items-center justify-between border border-[#e8e5e0] ">
+                          <span className="text-[#4f0303] font-bold text-[11px] flex items-center gap-1">
                             <DollarSign className="w-3 h-3" /> ຂາຍຈິງ:
                           </span>
                           <input
@@ -1588,11 +1588,11 @@ export default function Inventory() {
                               updated[idx].actualSoldQty = Number(e.target.value) || 0;
                               setSettlingItems(updated);
                             }}
-                            className="w-14 crystal-input !py-0.5 text-center font-mono text-emerald-500 font-bold"
+                            className="w-14 crystal-input !py-0.5 text-center font-mono text-[#4f0303] font-bold"
                           />
                         </div>
-                        <div className="p-2 bg-white dark:bg-[#141414] rounded-xl flex items-center justify-between border border-slate-200 dark:border-neutral-800">
-                          <span className="text-amber-500 font-bold text-[11px] flex items-center gap-1">
+                        <div className="p-2 bg-white  rounded-xl flex items-center justify-between border border-[#e8e5e0] ">
+                          <span className="text-[#4f0303] font-bold text-[11px] flex items-center gap-1">
                             <Gift className="w-3 h-3" /> ແຖມ/ຊິມ:
                           </span>
                           <input
@@ -1604,7 +1604,7 @@ export default function Inventory() {
                               updated[idx].sampleQty = Number(e.target.value) || 0;
                               setSettlingItems(updated);
                             }}
-                            className="w-14 crystal-input !py-0.5 text-center font-mono text-amber-500 font-bold"
+                            className="w-14 crystal-input !py-0.5 text-center font-mono text-[#4f0303] font-bold"
                           />
                         </div>
                       </div>
@@ -1628,23 +1628,23 @@ export default function Inventory() {
 
                   <div>
                     <label className="label-xs block mb-1">ສະລິບໂອນ (Ctrl+V ວາງໄດ້)</label>
-                    <div className="border border-dashed border-slate-300 dark:border-neutral-700 rounded-xl p-2 bg-slate-50 dark:bg-[#1c1c1c] text-center flex items-center justify-center min-h-[42px] relative">
-                      <input 
-                        type="file" 
-                        accept="image/*" 
+                    <div className="border border-dashed border-[#e8e5e0]  rounded-xl p-2 bg-[#faf9f6]  text-center flex items-center justify-center min-h-[42px] relative">
+                      <input
+                        type="file"
+                        accept="image/*"
                         onChange={async (e) => {
                           const file = e.target.files?.[0];
                           if (file) setSettlingSlip(await compressImage(file));
-                        }} 
-                        className="absolute inset-0 opacity-0 cursor-pointer w-full" 
+                        }}
+                        className="absolute inset-0 opacity-0 cursor-pointer w-full"
                       />
                       {settlingSlip ? (
                         <div className="flex items-center gap-2">
                           <img src={settlingSlip} alt="Slip" className="w-8 h-8 rounded-lg object-cover" />
-                          <span className="text-emerald-500 font-bold text-[10px]">✓ ແນບສະລິບແລ້ວ</span>
+                          <span className="inline-flex items-center gap-1 text-[#4f0303] font-bold text-[10px]"><CheckCircle2 className="h-3 w-3" /> ແນບສະລິບແລ້ວ</span>
                         </div>
                       ) : (
-                        <span className="text-slate-400 text-[10px] flex items-center gap-1">
+                        <span className="text-[#777777] text-[10px] flex items-center gap-1">
                           <Upload className="w-3 h-3" /> ຄລິກ ຫຼື ກົດ Ctrl+V
                         </span>
                       )}
@@ -1655,27 +1655,27 @@ export default function Inventory() {
                 {(() => {
                   const finalRevenue = settlingItems.reduce((sum, it) => sum + (Number(it.actualSoldQty || 0) * Number(it.sellingPrice || 0)), 0);
                   return (
-                    <div className="p-4 bg-slate-100 dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 rounded-2xl flex justify-between items-center">
+                    <div className="p-4 bg-[#f4f3f0]  border border-[#e8e5e0]  rounded-2xl flex justify-between items-center">
                       <div>
-                        <span className="text-xs text-slate-500 font-bold block">ຍອດຂາຍຕົວຈິງທີ່ຈະເຂົ້າ Dashboard:</span>
-                        <span className="text-[10px] text-slate-400">(ຄິດໄລ່ສະເພາະຈຳນວນທີ່ຂາຍໄດ້ຈິງ • ຕັດຍອດແຖມອອກ)</span>
+                        <span className="text-xs text-[#666666] font-bold block">ຍອດຂາຍຕົວຈິງທີ່ຈະເຂົ້າ Dashboard:</span>
+                        <span className="text-[10px] text-[#777777]">(ຄິດໄລ່ສະເພາະຈຳນວນທີ່ຂາຍໄດ້ຈິງ • ຕັດຍອດແຖມອອກ)</span>
                       </div>
-                      <span className="font-mono text-2xl font-black text-emerald-500">
+                      <span className="font-mono text-2xl font-black text-[#4f0303]">
                         {finalRevenue.toLocaleString()} ₭
                       </span>
                     </div>
                   );
                 })()}
 
-                <div className="pt-2 flex justify-end gap-2 border-t border-slate-100 dark:border-neutral-800">
-                  <button type="button" onClick={() => setSettlingPosBill(null)} className="px-4 py-2 rounded-xl border text-xs font-bold text-slate-400">
+                <div className="pt-2 flex justify-end gap-2 border-t border-[#e8e5e0] ">
+                  <button type="button" onClick={() => setSettlingPosBill(null)} className="px-4 py-2 rounded-xl border text-xs font-bold text-[#777777]">
                     ຍົກເລີກ
                   </button>
                   <button
                     type="button"
                     disabled={isSettling}
                     onClick={handleConfirmSettleBill}
-                    className="crystal-button !bg-emerald-600 hover:!bg-emerald-700 !text-white flex items-center gap-2 cursor-pointer shadow-md disabled:opacity-40"
+                    className="crystal-button !bg-[#4f0303] hover:!bg-[#680404] !text-white flex items-center gap-2 cursor-pointer shadow-md disabled:opacity-40"
                   >
                     <CheckCircle className="w-4 h-4 text-white" />
                     <span>{isSettling ? 'ກຳລັງເຄຍ...' : 'ຢືນຢັນເຄຍບິນ & ເພີ່ມຍອດຂາຍ'}</span>
@@ -1689,26 +1689,26 @@ export default function Inventory() {
 
       <POSReceiptModal bill={activeViewingBill} onClose={() => setActiveViewingBill(null)} />
 
-      {/* 🚀 MODAL: RECIPE BUILDER (ປ່ຽນເປັນ Searchable Ingredient Select) */}
+      {/*  MODAL: RECIPE BUILDER (ປ່ຽນເປັນ Searchable Ingredient Select) */}
       <AnimatePresence>
         {isRecipeModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.95 }} 
-              animate={{ opacity: 1, scale: 1 }} 
-              className="bg-white dark:bg-[#141414] rounded-3xl border border-slate-200 dark:border-neutral-800 w-full max-w-2xl shadow-2xl p-6 md:p-8 space-y-6 max-h-[92vh] overflow-y-auto"
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#1a1a1a]/80 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="bg-white  rounded-3xl border border-[#e8e5e0]  w-full max-w-2xl shadow-2xl p-6 md:p-8 space-y-6 max-h-[92vh] overflow-y-auto"
             >
-              <div className="flex justify-between items-center border-b border-slate-100 dark:border-neutral-800 pb-3">
+              <div className="flex justify-between items-center border-b border-[#e8e5e0]  pb-3">
                 <div>
-                  <h3 className="text-base font-serif text-slate-800 dark:text-white flex items-center gap-2">
-                    <BookOpen className="w-5 h-5 text-emerald-500" />
+                  <h3 className="text-base font-serif text-[#1a1a1a]  flex items-center gap-2">
+                    <BookOpen className="w-5 h-5 text-[#4f0303]" />
                     <span>{editingRecipe ? 'ແກ້ໄຂສູດ' : 'ສ້າງສູດ Cookie, ເຂົ້າໜົມ & ເຄື່ອງດື່ມ'}</span>
                   </h3>
-                  <p className="text-[10px] text-slate-400 mt-0.5">
+                  <p className="text-[10px] text-[#777777] mt-0.5">
                     ກຳນົດຈຳນວນກ້ອນຕໍ່ເຕົາ (Batch Yield) ແລະ ອັບໂຫຼດຮູບສິນຄ້າ (Ctrl+V ວາງຮູບໄດ້)
                   </p>
                 </div>
-                <button onClick={() => setIsRecipeModalOpen(false)} className="text-slate-400 hover:text-white p-1">✕</button>
+                <button onClick={() => setIsRecipeModalOpen(false)} className="text-[#777777] hover:text-[#4f0303] p-1"><X className="h-4 w-4" /></button>
               </div>
 
               <form onSubmit={handleSaveRecipe} className="space-y-5">
@@ -1726,7 +1726,7 @@ export default function Inventory() {
                   </div>
 
                   <div className="sm:col-span-4">
-                    <label className="label-xs block mb-1 text-emerald-600 dark:text-emerald-400">
+                    <label className="label-xs block mb-1 text-[#4f0303] ">
                       1 ສູດໄດ້ຈັກຫົວໜ່ວຍ/ກ່ອງ (Yield)
                     </label>
                     <input
@@ -1735,14 +1735,14 @@ export default function Inventory() {
                       required
                       value={batchYield}
                       onChange={e => setBatchYield(e.target.value)}
-                      className="crystal-input w-full font-mono font-bold text-center !text-sm border-emerald-500/30"
+                      className="crystal-input w-full font-mono font-bold text-center !text-sm border-[#4f0303]/30"
                       placeholder="10"
                     />
                   </div>
                 </div>
 
                 {/* ອັບໂຫຼດຮູບຕົວຢ່າງສິນຄ້າ (Ctrl+V) */}
-                <div 
+                <div
                   tabIndex={0}
                   onPaste={async (e) => {
                     const items = e.clipboardData?.items;
@@ -1758,13 +1758,13 @@ export default function Inventory() {
                       }
                     }
                   }}
-                  className="p-3.5 rounded-2xl bg-slate-50 dark:bg-[#1a1a1a] border border-slate-200 dark:border-neutral-800 space-y-1.5 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                  className="p-3.5 rounded-2xl bg-[#faf9f6]  border border-[#e8e5e0]  space-y-1.5 focus:outline-none focus:ring-1 focus:ring-[#4f0303]"
                 >
                   <label className="label-xs flex justify-between">
                     <span>ຮູບພາບຕົວຢ່າງສິນຄ້າ (Product Photo ທີ່ຈະໄປໂຊໃນໃບບິນ POS)</span>
-                    <span className="text-emerald-500 font-bold text-[9px]">Ctrl+V ວາງໄດ້</span>
+                    <span className="text-[#4f0303] font-bold text-[9px]">Ctrl+V ວາງໄດ້</span>
                   </label>
-                  <div className="border border-dashed border-slate-300 dark:border-neutral-700 rounded-xl p-2.5 relative flex items-center justify-between">
+                  <div className="border border-dashed border-[#e8e5e0]  rounded-xl p-2.5 relative flex items-center justify-between">
                     <input type="file" accept="image/*" onChange={async (e) => {
                       const file = e.target.files?.[0];
                       if (file) {
@@ -1774,20 +1774,20 @@ export default function Inventory() {
                     }} className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" />
                     {recipeImage ? (
                       <div className="flex items-center gap-3 w-full justify-between">
-                        <img src={recipeImage} alt="Recipe Preview" className="w-12 h-12 rounded-xl object-cover border border-neutral-700 shadow-sm" />
-                        <span className="text-xs font-bold text-emerald-500 truncate flex-1 pl-2">ອັບໂຫຼດຮູບແລ້ວ ✓ (ຈະໄປໂຊໃນໃບບິນ POS)</span>
-                        <button type="button" onClick={(e) => { e.stopPropagation(); setRecipeImage(''); }} className="text-rose-500 p-1">✕</button>
+                        <img src={recipeImage} alt="Recipe Preview" className="w-12 h-12 rounded-xl object-cover border border-[#e8e5e0] shadow-sm" />
+                        <span className="inline-flex items-center gap-1 text-xs font-bold text-[#4f0303] truncate flex-1 pl-2"><CheckCircle2 className="h-3.5 w-3.5 shrink-0" /> ອັບໂຫຼດຮູບແລ້ວ (ຈະໄປໂຊໃນໃບບິນ POS)</span>
+                        <button type="button" onClick={(e) => { e.stopPropagation(); setRecipeImage(''); }} className="text-[#4f0303] p-1"><X className="h-4 w-4" /></button>
                       </div>
                     ) : (
-                      <span className="text-xs text-slate-400 mx-auto flex items-center gap-1.5 font-bold"><Upload className="w-3.5 h-3.5" /> ຄລິກເລືອກຮູບ ຫຼື ກົດ <kbd className="px-1 py-0.5 rounded bg-neutral-200 dark:bg-neutral-800 text-[9px] text-white">Ctrl+V</kbd> ວາງຮູບໄດ້ທັນທີ</span>
+                      <span className="text-xs text-[#777777] mx-auto flex items-center gap-1.5 font-bold"><Upload className="w-3.5 h-3.5" /> ຄລິກເລືອກຮູບ ຫຼື ກົດ <kbd className="px-1 py-0.5 rounded bg-[#f4f3f0] text-[9px] text-[#4f0303]">Ctrl+V</kbd> ວາງຮູບໄດ້ທັນທີ</span>
                     )}
                   </div>
                 </div>
 
                 {/* Overhead & Selling Price */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="p-3.5 rounded-2xl bg-sky-500/10 border border-sky-500/20 space-y-1">
-                    <label className="label-xs !text-sky-500 flex items-center gap-1.5">
+                  <div className="p-3.5 rounded-2xl bg-[#4f0303]/10 border border-[#4f0303]/20 space-y-1">
+                    <label className="label-xs !text-[#4f0303] flex items-center gap-1.5">
                       <Zap className="w-3.5 h-3.5" />
                       <span>ຄ່າໄຟ-ນ້ຳ-ບັນຈຸພັນຕໍ່ 1 ຫົວໜ່ວຍ</span>
                     </label>
@@ -1800,8 +1800,8 @@ export default function Inventory() {
                     />
                   </div>
 
-                  <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 space-y-1">
-                    <label className="label-xs !text-emerald-500 flex items-center gap-1.5">
+                  <div className="p-3.5 rounded-2xl bg-[#4f0303]/10 border border-[#4f0303]/20 space-y-1">
+                    <label className="label-xs !text-[#4f0303] flex items-center gap-1.5">
                       <DollarSign className="w-3.5 h-3.5" />
                       <span>ລາຄາຂາຍຕໍ່ 1 ຫົວໜ່ວຍ/ກ່ອງ (Selling Price)</span>
                     </label>
@@ -1817,7 +1817,7 @@ export default function Inventory() {
 
                 {/* Notes */}
                 <div className="space-y-1">
-                  <label className="label-xs flex items-center gap-1.5 text-emerald-500">
+                  <label className="label-xs flex items-center gap-1.5 text-[#4f0303]">
                     <Tag className="w-3.5 h-3.5" />
                     <span>Note ການຕັ້ງລາຄາ & ເປົ້າໝາຍກຳໄລ</span>
                   </label>
@@ -1831,7 +1831,7 @@ export default function Inventory() {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="label-xs flex items-center gap-1.5 text-amber-500">
+                  <label className="label-xs flex items-center gap-1.5 text-[#4f0303]">
                     <FileText className="w-3.5 h-3.5" />
                     <span>Note ວິທີເຮັດ & ເທັກນິກການອົບ</span>
                   </label>
@@ -1851,7 +1851,7 @@ export default function Inventory() {
                     <button
                       type="button"
                       onClick={() => setRecipeIngredients(prev => [...prev, { productId: '', name: '', supplier: '', amount: '', unit: 'g', packSize: 1000, unitCostLAK: 0 }])}
-                      className="text-xs font-bold text-sky-500 hover:underline flex items-center gap-1 cursor-pointer"
+                      className="text-xs font-bold text-[#4f0303] hover:underline flex items-center gap-1 cursor-pointer"
                     >
                       <Plus className="w-3.5 h-3.5" />
                       <span>+ ເພີ່ມວັດຖຸດິບ</span>
@@ -1863,16 +1863,16 @@ export default function Inventory() {
                       const currentVal = ing.productId ? `${ing.productId}_${ing.supplier || ''}` : '';
                       const amt = Number(ing.amount) || 0;
                       const u = String(ing.unit || 'g').toLowerCase().trim();
-                      
+
                       let baseUnits = amt;
                       if (u === 'tsp' || u === 'ຊ້ອນຊາ') baseUnits = amt * 5;
                       else if (u === 'tbsp' || u === 'ຊ້ອນໂຕະ') baseUnits = amt * 15;
                       const itemTotalCost = baseUnits * (Number(ing.unitCostLAK) || 0);
 
                       return (
-                        <div key={idx} className="p-3.5 rounded-2xl bg-slate-50 dark:bg-[#1a1a1a] border border-slate-200/70 dark:border-neutral-800 space-y-2.5">
+                        <div key={idx} className="p-3.5 rounded-2xl bg-[#faf9f6]  border border-[#e8e5e0]/70  space-y-2.5">
                           <div className="flex items-center gap-2">
-                            {/* 🌟 ປ່ຽນເປັນ Searchable Ingredient Dropdown */}
+                            {/*  ປ່ຽນເປັນ Searchable Ingredient Dropdown */}
                             <div className="flex-1">
                               <SearchableIngredientSelect
                                 options={supplierProductOptions}
@@ -1894,14 +1894,14 @@ export default function Inventory() {
                               />
                             </div>
 
-                            <button type="button" onClick={() => setRecipeIngredients(prev => prev.filter((_, i) => i !== idx))} className="p-2 text-rose-500 hover:bg-rose-500/10 rounded-lg cursor-pointer">
+                            <button type="button" onClick={() => setRecipeIngredients(prev => prev.filter((_, i) => i !== idx))} className="p-2 text-[#4f0303] hover:bg-[#680404]/10 rounded-lg cursor-pointer">
                               <Trash2 className="w-4 h-4" />
                             </button>
                           </div>
 
                           <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center">
                             <div className="sm:col-span-5">
-                              <span className="text-[9px] text-slate-400 block mb-0.5">ຈຳນວນທີ່ໃຊ້ໃນ 1 ເຕົາ</span>
+                              <span className="text-[9px] text-[#777777] block mb-0.5">ຈຳນວນທີ່ໃຊ້ໃນ 1 ເຕົາ</span>
                               <input
                                 type="number"
                                 step="any"
@@ -1914,7 +1914,7 @@ export default function Inventory() {
                             </div>
 
                             <div className="sm:col-span-3">
-                              <span className="text-[9px] text-slate-400 block mb-0.5">ຫົວໜ່ວຍ</span>
+                              <span className="text-[9px] text-[#777777] block mb-0.5">ຫົວໜ່ວຍ</span>
                               <select
                                 value={ing.unit}
                                 onChange={e => setRecipeIngredients(prev => prev.map((it, i) => i === idx ? { ...it, unit: e.target.value } : it))}
@@ -1928,11 +1928,11 @@ export default function Inventory() {
                               </select>
                             </div>
 
-                            <div className="sm:col-span-4 p-2 rounded-xl bg-slate-100 dark:bg-[#202020] text-right font-mono">
-                              <span className="text-[8px] text-slate-400 block uppercase">
+                            <div className="sm:col-span-4 p-2 rounded-xl bg-[#f4f3f0]  text-right font-mono">
+                              <span className="text-[8px] text-[#777777] block uppercase">
                                 ຕົ້ນທຶນ {u === 'tsp' || u === 'tbsp' ? `(≈${baseUnits}g)` : ''}:
                               </span>
-                              <span className="text-xs font-black text-emerald-500">
+                              <span className="text-xs font-black text-[#4f0303]">
                                 ≈ {Math.round(itemTotalCost).toLocaleString()} ₭
                               </span>
                             </div>
@@ -1944,27 +1944,27 @@ export default function Inventory() {
                 </div>
 
                 {/* Live Breakdown */}
-                <div className="p-4 rounded-2xl bg-neutral-100 dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 space-y-1.5 font-mono text-xs">
+                <div className="p-4 rounded-2xl bg-[#f4f3f0]  border border-[#e8e5e0]  space-y-1.5 font-mono text-xs">
                   <div className="flex justify-between">
-                    <span className="text-slate-500">ຕົ້ນທຶນວັດຖຸດິບລວມ ({currentModalCalc.yieldCount} ກ້ອນ):</span>
+                    <span className="text-[#666666]">ຕົ້ນທຶນວັດຖຸດິບລວມ ({currentModalCalc.yieldCount} ກ້ອນ):</span>
                     <span>{Math.round(currentModalCalc.totalBatchRaw).toLocaleString()} ₭</span>
                   </div>
                   <div className="flex justify-between font-bold">
                     <span>ຕົ້ນທຶນວັດຖຸດິບຕໍ່ 1 ກ້ອນ ({Math.round(currentModalCalc.totalBatchRaw).toLocaleString()} ÷ {currentModalCalc.yieldCount}):</span>
-                    <span className="text-sky-500">{Math.round(currentModalCalc.rawPerUnit).toLocaleString()} ₭</span>
+                    <span className="text-[#4f0303]">{Math.round(currentModalCalc.rawPerUnit).toLocaleString()} ₭</span>
                   </div>
-                  <div className="flex justify-between font-black border-t border-slate-200 dark:border-neutral-800 pt-1">
+                  <div className="flex justify-between font-black border-t border-[#e8e5e0]  pt-1">
                     <span>ຕົ້ນທຶນຕົວຈິງລວມຕໍ່ 1 ກ້ອນ (+ຄ່າໄຟ {currentModalCalc.overhead.toLocaleString()}₭):</span>
-                    <span className="text-slate-900 dark:text-white text-sm">{Math.round(currentModalCalc.totalCostPerUnit).toLocaleString()} ₭</span>
+                    <span className="text-[#1a1a1a]  text-sm">{Math.round(currentModalCalc.totalCostPerUnit).toLocaleString()} ₭</span>
                   </div>
-                  <div className="flex justify-between font-black text-sm border-t border-slate-200 dark:border-neutral-800 pt-1 text-emerald-500">
+                  <div className="flex justify-between font-black text-sm border-t border-[#e8e5e0]  pt-1 text-[#4f0303]">
                     <span>ກຳໄລສຸດທິຕໍ່ 1 ກ້ອນ (ຂາຍ {currentModalCalc.price.toLocaleString()}₭):</span>
                     <span>+{Math.round(currentModalCalc.netProfit).toLocaleString()} ₭ ({currentModalCalc.margin.toFixed(1)}%)</span>
                   </div>
                 </div>
 
-                <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-neutral-800">
-                  <button type="button" onClick={() => setIsRecipeModalOpen(false)} className="px-4 py-2 rounded-xl border text-xs font-bold text-slate-400">ຍົກເລີກ</button>
+                <div className="flex justify-end gap-2 pt-2 border-t border-[#e8e5e0] ">
+                  <button type="button" onClick={() => setIsRecipeModalOpen(false)} className="px-4 py-2 rounded-xl border text-xs font-bold text-[#777777]">ຍົກເລີກ</button>
                   <button type="submit" disabled={isSavingRecipe} className="crystal-button">ບັນທຶກສູດ</button>
                 </div>
               </form>
