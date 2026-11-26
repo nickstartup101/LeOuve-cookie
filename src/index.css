@@ -37,6 +37,11 @@
   -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 10%, black 90%, transparent 100%);
 }
 
+.receipt-image-frame {
+  padding-top: 0.75rem;
+  padding-bottom: 0.75rem;
+}
+
 @media print {
   @page {
     size: 80mm auto;
@@ -101,6 +106,10 @@
     break-inside: avoid;
     print-color-adjust: exact !important;
     -webkit-print-color-adjust: exact !important;
+  }
+
+  .receipt-image-frame {
+    padding: 0 !important;
   }
 
   .receipt-print-controls {
