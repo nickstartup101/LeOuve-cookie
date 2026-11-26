@@ -5,11 +5,12 @@ import {
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { useTranslation } from 'react-i18next';
+import POSReceiptModal from './PosReceiptModal';
 import { 
   BookOpen, Plus, Trash2, Edit2, Calendar, 
   Package, ShoppingCart, Layers, Zap, Utensils, FileText,
-  DollarSign, TrendingUp, Sparkles, Tag, Upload, X, Receipt, Printer, CheckCircle2,
-  Eye, User, Clock, CheckCircle, Edit3, Gift, Search, ChevronDown
+  DollarSign, TrendingUp, Sparkles, Tag, Upload, X, Receipt,
+  Eye, User, Clock, Check, CheckCircle, Edit3, Gift, Search, ChevronDown, Copy
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -389,17 +390,16 @@ export default function Inventory() {
     });
 
     products.forEach(pr => {
-      const exists = Array.from(map.values()).some(o => o.productId === pr.id);
-      if (!exists) {
-        map.set(`${pr.id}_default`, {
-          productId: pr.id,
-          name: pr.name,
-          supplier: 'Default',
-          unit: pr.unit || 'g',
-          packSize: pr.packSize || 1000,
-          unitCostLAK: 0
-        });
-      }
+      const productOptions = Array.from(map.values()).filter(o => o.productId === pr.id);
+      const latestUnitCost = productOptions[0]?.unitCostLAK || 0;
+      map.set(`${pr.id}_product`, {
+        productId: pr.id,
+        name: pr.name,
+        supplier: 'Product',
+        unit: pr.unit || 'g',
+        packSize: pr.packSize || 1000,
+        unitCostLAK: latestUnitCost
+      });
     });
 
     return Array.from(map.values());
@@ -484,15 +484,15 @@ export default function Inventory() {
           const recipe = recipes.find(r => r.id === recipeId);
           if (recipe) {
             const yieldCount = Math.max(1, Number(recipe.batchYield) || 1);
-            const ing = (recipe.ingredients || []).find((i: any) => i && i.productId === p.id);
-            if (ing) {
+            const matchingIngredients = (recipe.ingredients || []).filter((i: any) => i && i.productId === p.id);
+            matchingIngredients.forEach((ing: any) => {
               const amt = Number(ing.amount) || 0;
               const u = String(ing.unit || p.unit || 'g').toLowerCase().trim();
               let baseUnits = amt;
               if (u === 'tsp' || u === 'ຊ້ອນຊາ') baseUnits = amt * 5;
               else if (u === 'tbsp' || u === 'ຊ້ອນໂຕະ') baseUnits = amt * 15;
               totalConsumed += (baseUnits / yieldCount) * qtySold;
-            }
+            });
           }
         });
       });
@@ -565,6 +565,30 @@ export default function Inventory() {
     } finally {
       setIsSavingRecipe(false);
     }
+  };
+
+  const handleDuplicateRecipe = (sourceRecipe: any) => {
+    setEditingRecipe(null);
+    setMenuName(`${sourceRecipe.menuName} (Mini Size / ກ່ອງ)`);
+    setBatchYield(Math.max(1, Math.round((Number(sourceRecipe.batchYield) || 1) / 10)));
+    setOverheadCost(Number(sourceRecipe.overheadCost) || 0);
+    setSellingPrice((Number(sourceRecipe.sellingPrice) || 0) * 10);
+    setRecipeImage(sourceRecipe.recipeImage || '');
+    setPricingNote(sourceRecipe.pricingNote || '');
+    setNote(sourceRecipe.note || '');
+    setRecipeIngredients((sourceRecipe.ingredients || []).map((ing: any) => {
+      const productOption = supplierProductOptions.find(option => option.productId === ing.productId);
+      return {
+        productId: ing.productId || '',
+        name: ing.name || '',
+        supplier: ing.supplier || '',
+        amount: ing.amount ?? '',
+        unit: ing.unit || 'g',
+        packSize: ing.packSize || 1000,
+        unitCostLAK: Number(ing.unitCostLAK) || productOption?.unitCostLAK || 0
+      };
+    }));
+    setIsRecipeModalOpen(true);
   };
 
   // Live Modal Cost Calculation
@@ -1240,7 +1264,7 @@ export default function Inventory() {
                   <div className="flex-1 min-w-0">
                     <h4 className="text-base font-serif text-slate-800 dark:text-white truncate">{recipe.menuName}</h4>
                     <span className="text-[10px] text-slate-400 font-mono block">
-                      1 ສູດ = {recipe.batchYield} ກ້ອນ/ຈອກ
+                      1 ສູດ = {recipe.batchYield} ຫົວໜ່ວຍ/ກ່ອງ
                     </span>
                     <span className="text-xs font-mono font-bold text-sky-500 block mt-0.5">
                       ຂາຍ: {Number(recipe.sellingPrice).toLocaleString()} ₭
@@ -1251,23 +1275,23 @@ export default function Inventory() {
                     <span className="text-sm font-black font-mono text-emerald-500 block">
                       {Math.round(recipe.totalCostPerUnit).toLocaleString()} ₭
                     </span>
-                    <span className="text-[9px] text-slate-400 block font-normal">ຕົ້ນທຶນ/ກ້ອນ</span>
+                    <span className="text-[9px] text-slate-400 block font-normal">ຕົ້ນທຶນ/ຫົວໜ່ວຍ</span>
                   </div>
                 </div>
 
                 <div className="mt-3 p-3 rounded-2xl bg-slate-50 dark:bg-[#1a1a1a] text-xs space-y-1 font-mono">
                   <div className="flex justify-between text-slate-500">
-                    <span>ວັດຖຸດິບຕໍ່ກ້ອນ ({Math.round(recipe.totalBatchRawCost).toLocaleString()} ÷ {recipe.batchYield}):</span>
+                    <span>ວັດຖຸດິບຕໍ່ຫົວໜ່ວຍ ({Math.round(recipe.totalBatchRawCost).toLocaleString()} ÷ {recipe.batchYield}):</span>
                     <span>{Math.round(recipe.rawCostPerUnit).toLocaleString()} ₭</span>
                   </div>
                   <div className="flex justify-between text-slate-500">
-                    <span>+ ຄ່າໄຟ-ນ້ຳຕໍ່ກ້ອນ:</span>
+                    <span>+ ຄ່າໄຟ-ນ້ຳຕໍ່ຫົວໜ່ວຍ:</span>
                     <span>+{Math.round(recipe.overheadCost).toLocaleString()} ₭</span>
                   </div>
                   
                   {recipe.sellingPrice > 0 && (
                     <div className="border-t border-slate-200 dark:border-neutral-800 pt-1 flex justify-between items-center text-xs font-bold">
-                      <span className="text-slate-700 dark:text-neutral-200">ກຳໄລຕໍ່ກ້ອນ:</span>
+                      <span className="text-slate-700 dark:text-neutral-200">ກຳໄລຕໍ່ຫົວໜ່ວຍ:</span>
                       <span className={`font-black ${recipe.netProfitPerUnit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
                         +{Math.round(recipe.netProfitPerUnit).toLocaleString()} ₭ ({recipe.profitMarginPercent.toFixed(1)}%)
                       </span>
@@ -1290,6 +1314,13 @@ export default function Inventory() {
               </div>
 
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-neutral-800">
+                <button
+                  onClick={() => handleDuplicateRecipe(recipe)}
+                  className="p-2 text-slate-400 hover:text-emerald-500 rounded-lg cursor-pointer"
+                  title="Duplicate Recipe"
+                >
+                  <Copy className="w-4 h-4" />
+                </button>
                 <button
                   onClick={() => {
                     setEditingRecipe(recipe);
@@ -1656,122 +1687,7 @@ export default function Inventory() {
         )}
       </AnimatePresence>
 
-      {/* 🌟 VIRTUAL POS RECEIPT MODAL */}
-      <AnimatePresence>
-        {activeViewingBill && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setActiveViewingBill(null)}>
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.95 }} 
-              animate={{ opacity: 1, scale: 1 }} 
-              className="bg-[#faf7f0] text-slate-800 w-full max-w-sm rounded-3xl p-6 shadow-2xl relative border-t-8 border-dashed border-[#052659] max-h-[92vh] overflow-y-auto"
-              style={{ fontFamily: "'Courier New', Courier, monospace" }}
-              onClick={e => e.stopPropagation()}
-            >
-              <button 
-                onClick={() => setActiveViewingBill(null)} 
-                className="absolute top-4 right-4 p-1.5 rounded-full bg-slate-200/60 hover:bg-slate-300 text-slate-600 cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-
-              <div className="text-center space-y-1 border-b border-dashed border-slate-300 pb-3">
-                <h2 className="text-xl font-serif font-black uppercase text-slate-900 tracking-tight">
-                  LE OUVE WORKSPACE
-                </h2>
-                <p className="text-[10px] text-slate-500 uppercase tracking-widest leading-none">
-                  Bakery & Cafe Architecture
-                </p>
-                <p className="text-[10px] text-slate-500">Vientiane, Lao PDR</p>
-                
-                <div className="pt-2 text-[10px] text-slate-600 text-left space-y-0.5 font-mono">
-                  <div className="flex justify-between">
-                    <span>BILL: {activeViewingBill.billNo}</span>
-                    <span>{activeViewingBill.date} {activeViewingBill.time}</span>
-                  </div>
-                  <div className="flex justify-between font-bold text-slate-900">
-                    <span>CUSTOMER: {activeViewingBill.customerName}</span>
-                    <span className="uppercase">{activeViewingBill.paymentMethod}</span>
-                  </div>
-                  {activeViewingBill.orderNote && (
-                    <div className="pt-1 text-[10px] text-sky-700 font-sans italic">
-                      💬 Note: {activeViewingBill.orderNote}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="py-3 space-y-2.5 border-b border-dashed border-slate-300">
-                <div className="text-[10px] font-bold text-slate-400 flex justify-between pb-1 border-b border-dotted border-slate-200 uppercase">
-                  <span>ITEM</span>
-                  <span>QTY × PRICE</span>
-                  <span>TOTAL (₭)</span>
-                </div>
-
-                {activeViewingBill.items?.map((it: any, idx: number) => (
-                  <div key={idx} className="flex items-center gap-2.5 py-1">
-                    {it.recipeImage ? (
-                      <img src={it.recipeImage} alt={it.menuName} className="w-10 h-10 rounded-lg object-cover border border-slate-300 shrink-0" />
-                    ) : (
-                      <div className="w-10 h-10 rounded-lg bg-slate-200 flex items-center justify-center text-slate-400 shrink-0">
-                        <Package className="w-4 h-4" />
-                      </div>
-                    )}
-
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-black text-slate-900 truncate leading-tight">{it.menuName}</p>
-                      <p className="text-[10px] text-slate-500 font-mono">
-                        {(it.actualSoldQty !== undefined ? it.actualSoldQty : (it.soldQty || it.producedQty))} × {Number(it.sellingPrice).toLocaleString()}
-                      </p>
-                    </div>
-
-                    <span className="text-xs font-mono font-black text-slate-900 shrink-0">
-                      {((it.actualSoldQty !== undefined ? it.actualSoldQty : (it.soldQty || it.producedQty)) * it.sellingPrice).toLocaleString()} ₭
-                    </span>
-                  </div>
-                ))}
-              </div>
-
-              <div className="py-3 space-y-1.5 text-xs font-mono border-b border-dashed border-slate-300">
-                <div className="flex justify-between text-slate-600">
-                  <span>ຈຳນວນລາຍການ:</span>
-                  <span>{activeViewingBill.totalQty} ຊິ້ນ/ຈອກ</span>
-                </div>
-                <div className="flex justify-between text-base font-black text-slate-900 pt-1.5 border-t border-slate-300">
-                  <span>ຍອດລວມ (TOTAL):</span>
-                  <span>{Number(activeViewingBill.actualRevenue || activeViewingBill.totalRevenue).toLocaleString()} ₭</span>
-                </div>
-              </div>
-
-              <div className="text-center pt-3 space-y-2">
-                <div className="flex items-center justify-center gap-1.5 text-emerald-600 text-xs font-bold font-sans">
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>Deducted & Issued ✓</span>
-                </div>
-                <p className="text-[9px] text-slate-400 italic">
-                  THANK YOU FOR SUPPORTING LE OUVE
-                </p>
-
-                <div className="pt-2 flex gap-2">
-                  <button
-                    onClick={() => window.print()}
-                    className="flex-1 py-2.5 rounded-xl bg-slate-900 hover:bg-black text-white font-sans text-xs font-bold flex items-center justify-center gap-2 cursor-pointer shadow-md"
-                  >
-                    <Printer className="w-3.5 h-3.5" />
-                    <span>Print Bill</span>
-                  </button>
-                  <button
-                    onClick={() => setActiveViewingBill(null)}
-                    className="px-4 py-2.5 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 font-sans text-xs font-bold cursor-pointer"
-                  >
-                    ປິດ
-                  </button>
-                </div>
-              </div>
-
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+      <POSReceiptModal bill={activeViewingBill} onClose={() => setActiveViewingBill(null)} />
 
       {/* 🚀 MODAL: RECIPE BUILDER (ປ່ຽນເປັນ Searchable Ingredient Select) */}
       <AnimatePresence>
@@ -1811,7 +1727,7 @@ export default function Inventory() {
 
                   <div className="sm:col-span-4">
                     <label className="label-xs block mb-1 text-emerald-600 dark:text-emerald-400">
-                      1 ສູດໄດ້ຈັກກ້ອນ/ຈອກ (Yield)
+                      1 ສູດໄດ້ຈັກຫົວໜ່ວຍ/ກ່ອງ (Yield)
                     </label>
                     <input
                       type="number"
@@ -1873,7 +1789,7 @@ export default function Inventory() {
                   <div className="p-3.5 rounded-2xl bg-sky-500/10 border border-sky-500/20 space-y-1">
                     <label className="label-xs !text-sky-500 flex items-center gap-1.5">
                       <Zap className="w-3.5 h-3.5" />
-                      <span>ຄ່າໄຟ-ນ້ຳ-ບັນຈຸພັນຕໍ່ 1 ກ້ອນ</span>
+                      <span>ຄ່າໄຟ-ນ້ຳ-ບັນຈຸພັນຕໍ່ 1 ຫົວໜ່ວຍ</span>
                     </label>
                     <input
                       type="number"
@@ -1887,7 +1803,7 @@ export default function Inventory() {
                   <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 space-y-1">
                     <label className="label-xs !text-emerald-500 flex items-center gap-1.5">
                       <DollarSign className="w-3.5 h-3.5" />
-                      <span>ລາຄາຂາຍຕໍ່ 1 ກ້ອນ (Selling Price)</span>
+                      <span>ລາຄາຂາຍຕໍ່ 1 ຫົວໜ່ວຍ/ກ່ອງ (Selling Price)</span>
                     </label>
                     <input
                       type="number"

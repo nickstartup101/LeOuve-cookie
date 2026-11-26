@@ -5,11 +5,12 @@ import {
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { useTranslation } from 'react-i18next';
+import POSReceiptModal from './PosReceiptModal';
 import { 
   DollarSign, TrendingUp, Wallet, CreditCard, 
   Plus, Trash2, Edit2, Calendar, Clock,
   Download, QrCode, Building2,
-  HandCoins, Receipt, Upload, Eye, Target, Sliders, Calculator, Sparkles, X, ZoomIn, CheckCircle2
+  HandCoins, Receipt, Upload, Eye, Target, Sliders, Calculator, Sparkles, X, ZoomIn
 } from 'lucide-react';
 import { 
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip 
@@ -1070,53 +1071,7 @@ export default function Finance({ userSettings }: { userSettings?: any }) {
         </div>
       )}
 
-      {/* 🌟 VIRTUAL POS RECEIPT VIEWER FOR SALES BILLS */}
-      {viewingPosBill && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setViewingPosBill(null)}>
-          <div 
-            className="bg-[#faf7f0] text-slate-800 w-full max-w-sm rounded-3xl p-6 shadow-2xl relative border-t-8 border-dashed border-[#052659] max-h-[92vh] overflow-y-auto"
-            style={{ fontFamily: "'Courier New', Courier, monospace" }}
-            onClick={e => e.stopPropagation()}
-          >
-            <button onClick={() => setViewingPosBill(null)} className="absolute top-4 right-4 p-1.5 rounded-full bg-slate-200/60 hover:bg-slate-300 text-slate-600 cursor-pointer">
-              <X className="w-4 h-4" />
-            </button>
-
-            <div className="text-center space-y-1 border-b border-dashed border-slate-300 pb-3">
-              <h2 className="text-xl font-serif font-black uppercase text-slate-900 tracking-tight">LE OUVE WORKSPACE</h2>
-              <p className="text-[10px] text-slate-500 uppercase tracking-widest leading-none">Bakery & Cafe Architecture</p>
-              <div className="pt-2 text-[10px] text-slate-600 text-left space-y-0.5 font-mono">
-                <div className="flex justify-between"><span>BILL: {viewingPosBill.billNo}</span><span>{viewingPosBill.date} {viewingPosBill.time}</span></div>
-                <div className="flex justify-between font-bold text-slate-900"><span>CUSTOMER: {viewingPosBill.customerName}</span><span className="uppercase">{viewingPosBill.paymentMethod}</span></div>
-              </div>
-            </div>
-
-            {/* Line items with photos */}
-            <div className="py-3 space-y-2 border-b border-dashed border-slate-300">
-              {viewingPosBill.items?.map((it: any, idx: number) => (
-                <div key={idx} className="flex items-center gap-2 py-1">
-                  {it.recipeImage && <img src={it.recipeImage} alt={it.menuName} className="w-8 h-8 rounded-lg object-cover border border-slate-300 shrink-0" />}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-black text-slate-900 truncate">{it.menuName}</p>
-                    <p className="text-[10px] text-slate-500 font-mono">{it.soldQty} × {Number(it.sellingPrice).toLocaleString()}</p>
-                  </div>
-                  <span className="text-xs font-mono font-black text-slate-900">{it.lineRevenue?.toLocaleString()} ₭</span>
-                </div>
-              ))}
-            </div>
-
-            <div className="py-3 flex justify-between text-sm font-black text-slate-900">
-              <span>ຍອດລວມ (TOTAL):</span>
-              <span>{Number(viewingPosBill.totalRevenue).toLocaleString()} ₭</span>
-            </div>
-
-            <div className="pt-2 flex gap-2">
-              <button onClick={() => window.print()} className="flex-1 py-2 rounded-xl bg-slate-900 text-white font-sans text-xs font-bold cursor-pointer">Print Receipt</button>
-              <button onClick={() => setViewingPosBill(null)} className="px-4 py-2 rounded-xl bg-slate-200 text-slate-700 font-sans text-xs font-bold cursor-pointer">ປິດ</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <POSReceiptModal bill={viewingPosBill} onClose={() => setViewingPosBill(null)} />
 
       {/* Preview Image Modal */}
       {previewImage && (
