@@ -443,19 +443,23 @@ export default function Inventory() {
       }).filter(Boolean);
 
       const overhead = Number(recipe.overheadCost) || 0;
+      const totalBatchCost = totalBatchRawCost + overhead;
       const rawCostPerUnit = totalBatchRawCost / yieldCount;
-      const totalCostPerUnit = rawCostPerUnit + overhead;
+      const overheadPerUnit = overhead / yieldCount;
+      const totalCostPerUnit = totalBatchCost / yieldCount;
       const price = Number(recipe.sellingPrice) || 0;
-      const netProfitPerUnit = price > 0 ? price - totalCostPerUnit : 0;
+      const netProfitPerUnit = price - totalCostPerUnit;
       const profitMarginPercent = price > 0 ? (netProfitPerUnit / price) * 100 : 0;
 
       return {
         ...recipe,
         ingredientsDetailed: parsedIngredients,
         totalBatchRawCost,
+        totalBatchCost,
         batchYield: yieldCount,
         rawCostPerUnit,
         overheadCost: overhead,
+        overheadPerUnit,
         totalCostPerUnit,
         sellingPrice: price,
         netProfitPerUnit,
@@ -605,16 +609,20 @@ export default function Inventory() {
     const yieldCount = Math.max(1, Number(batchYield) || 1);
     const rawPerUnit = totalBatchRaw / yieldCount;
     const overhead = Number(overheadCost) || 0;
-    const totalCostPerUnit = rawPerUnit + overhead;
+    const totalBatchCost = totalBatchRaw + overhead;
+    const overheadPerUnit = overhead / yieldCount;
+    const totalCostPerUnit = totalBatchCost / yieldCount;
     const price = Number(sellingPrice) || 0;
-    const netProfit = price > 0 ? price - totalCostPerUnit : 0;
+    const netProfit = price - totalCostPerUnit;
     const margin = price > 0 ? (netProfit / price) * 100 : 0;
 
     return {
       totalBatchRaw: isNaN(totalBatchRaw) ? 0 : totalBatchRaw,
+      totalBatchCost: isNaN(totalBatchCost) ? 0 : totalBatchCost,
       yieldCount,
       rawPerUnit: isNaN(rawPerUnit) ? 0 : rawPerUnit,
       overhead,
+      overheadPerUnit: isNaN(overheadPerUnit) ? 0 : overheadPerUnit,
       totalCostPerUnit: isNaN(totalCostPerUnit) ? 0 : totalCostPerUnit,
       price,
       netProfit: isNaN(netProfit) ? 0 : netProfit,
@@ -1281,19 +1289,23 @@ export default function Inventory() {
 
                 <div className="mt-3 p-3 rounded-2xl bg-[#faf9f6]  text-xs space-y-1 font-mono">
                   <div className="flex justify-between text-[#666666]">
-                    <span>ວັດຖຸດິບຕໍ່ຫົວໜ່ວຍ ({Math.round(recipe.totalBatchRawCost).toLocaleString()} ÷ {recipe.batchYield}):</span>
+                    <span>ວັດຖຸດິບຕໍ່ຫົວໜ່ວຍ (rawCost ÷ yield):</span>
                     <span>{Math.round(recipe.rawCostPerUnit).toLocaleString()} ₭</span>
                   </div>
                   <div className="flex justify-between text-[#666666]">
-                    <span>+ ຄ່າໄຟ-ນ້ຳຕໍ່ຫົວໜ່ວຍ:</span>
-                    <span>+{Math.round(recipe.overheadCost).toLocaleString()} ₭</span>
+                    <span>+ ຄ່າໄຟ-ນ້ຳຕໍ່ຫົວໜ່ວຍ (overheadBatch ÷ yield):</span>
+                    <span>{Math.round(recipe.overheadPerUnit).toLocaleString()} ₭</span>
+                  </div>
+                  <div className="flex justify-between border-t border-[#e8e5e0] pt-1 font-bold text-[#1a1a1a]">
+                    <span>ຕົ້ນທຶນຕົວຈິງລວມ: ({Math.round(recipe.rawCostPerUnit).toLocaleString()} + {Math.round(recipe.overheadPerUnit).toLocaleString()})</span>
+                    <span>{Math.round(recipe.totalCostPerUnit).toLocaleString()} ₭</span>
                   </div>
 
                   {recipe.sellingPrice > 0 && (
                     <div className="border-t border-[#e8e5e0]  pt-1 flex justify-between items-center text-xs font-bold">
                       <span className="text-[#1a1a1a] ">ກຳໄລຕໍ່ຫົວໜ່ວຍ:</span>
-                      <span className={`font-black ${recipe.netProfitPerUnit >= 0 ? 'text-[#4f0303]' : 'text-[#4f0303]'}`}>
-                        +{Math.round(recipe.netProfitPerUnit).toLocaleString()} ₭ ({recipe.profitMarginPercent.toFixed(1)}%)
+                      <span className={`font-black ${recipe.netProfitPerUnit >= 0 ? 'text-[#4f0303]' : 'text-[#666666]'}`}>
+                        {Math.round(recipe.netProfitPerUnit).toLocaleString()} ₭ ({recipe.profitMarginPercent.toFixed(1)}%)
                       </span>
                     </div>
                   )}
@@ -1789,7 +1801,7 @@ export default function Inventory() {
                   <div className="p-3.5 rounded-2xl bg-[#4f0303]/10 border border-[#4f0303]/20 space-y-1">
                     <label className="label-xs !text-[#4f0303] flex items-center gap-1.5">
                       <Zap className="w-3.5 h-3.5" />
-                      <span>ຄ່າໄຟ-ນ້ຳ-ບັນຈຸພັນຕໍ່ 1 ຫົວໜ່ວຍ</span>
+                      <span>ຄ່າໄຟ-ນ້ຳ-ແຮງງານຕໍ່ 1 ເຕົາ/ສູດໃຫຍ່ (Overhead per Batch)</span>
                     </label>
                     <input
                       type="number"
@@ -1949,17 +1961,29 @@ export default function Inventory() {
                     <span className="text-[#666666]">ຕົ້ນທຶນວັດຖຸດິບລວມ ({currentModalCalc.yieldCount} ກ້ອນ):</span>
                     <span>{Math.round(currentModalCalc.totalBatchRaw).toLocaleString()} ₭</span>
                   </div>
+                  <div className="flex justify-between text-[#666666]">
+                    <span>ຄ່າໄຟ-ນ້ຳ-ແຮງງານຕໍ່ 1 ເຕົາ/ສູດໃຫຍ່:</span>
+                    <span>{Math.round(currentModalCalc.overhead).toLocaleString()} ₭</span>
+                  </div>
                   <div className="flex justify-between font-bold">
-                    <span>ຕົ້ນທຶນວັດຖຸດິບຕໍ່ 1 ກ້ອນ ({Math.round(currentModalCalc.totalBatchRaw).toLocaleString()} ÷ {currentModalCalc.yieldCount}):</span>
+                    <span>ຕົ້ນທຶນລວມຕໍ່ 1 ເຕົາ (ວັດຖຸດິບ + ໂອເວີເຮດ):</span>
+                    <span>{Math.round(currentModalCalc.totalBatchCost).toLocaleString()} ₭</span>
+                  </div>
+                  <div className="flex justify-between font-bold">
+                    <span>ວັດຖຸດິບຕໍ່ຫົວໜ່ວຍ (rawCost ÷ yield):</span>
                     <span className="text-[#4f0303]">{Math.round(currentModalCalc.rawPerUnit).toLocaleString()} ₭</span>
                   </div>
+                  <div className="flex justify-between">
+                    <span>+ ຄ່າໄຟ-ນ້ຳຕໍ່ຫົວໜ່ວຍ (overheadBatch ÷ yield):</span>
+                    <span>{Math.round(currentModalCalc.overheadPerUnit).toLocaleString()} ₭</span>
+                  </div>
                   <div className="flex justify-between font-black border-t border-[#e8e5e0]  pt-1">
-                    <span>ຕົ້ນທຶນຕົວຈິງລວມຕໍ່ 1 ກ້ອນ (+ຄ່າໄຟ {currentModalCalc.overhead.toLocaleString()}₭):</span>
+                    <span>ຕົ້ນທຶນຕົວຈິງລວມ: ({Math.round(currentModalCalc.rawPerUnit).toLocaleString()} + {Math.round(currentModalCalc.overheadPerUnit).toLocaleString()}) ₭</span>
                     <span className="text-[#1a1a1a]  text-sm">{Math.round(currentModalCalc.totalCostPerUnit).toLocaleString()} ₭</span>
                   </div>
                   <div className="flex justify-between font-black text-sm border-t border-[#e8e5e0]  pt-1 text-[#4f0303]">
                     <span>ກຳໄລສຸດທິຕໍ່ 1 ກ້ອນ (ຂາຍ {currentModalCalc.price.toLocaleString()}₭):</span>
-                    <span>+{Math.round(currentModalCalc.netProfit).toLocaleString()} ₭ ({currentModalCalc.margin.toFixed(1)}%)</span>
+                    <span>{Math.round(currentModalCalc.netProfit).toLocaleString()} ₭ ({currentModalCalc.margin.toFixed(1)}%)</span>
                   </div>
                 </div>
 
