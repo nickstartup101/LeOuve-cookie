@@ -11,6 +11,7 @@ import {
   Printer,
   Receipt,
   RotateCcw,
+  Save,
   SlidersHorizontal,
   Wifi,
   X
@@ -27,6 +28,7 @@ interface ReceiptSettings {
   wifiName: string;
   wifiPassword: string;
   notice: string;
+  barcodeCaption: string;
 }
 
 interface PosReceiptModalProps {
@@ -34,7 +36,8 @@ interface PosReceiptModalProps {
   onClose: () => void;
 }
 
-const SETTINGS_KEY = 'leOuveReceiptSettings';
+const SETTINGS_KEY = 'leouve_receipt_template_v1';
+const LEGACY_SETTINGS_KEY = 'leOuveReceiptSettings';
 
 const DEFAULT_SETTINGS: ReceiptSettings = {
   brandName: 'Le Ouve',
@@ -44,7 +47,8 @@ const DEFAULT_SETTINGS: ReceiptSettings = {
   thankYou: 'THANK YOU FOR SUPPORTING LE OUVE',
   wifiName: '',
   wifiPassword: '',
-  notice: 'Please check your items before leaving.'
+  notice: 'Please check your items before leaving.',
+  barcodeCaption: 'LE OUVE WORKSPACE • {billNo}'
 };
 
 const TOP_EDGE_PATH = 'M0 0 L10 8 L20 0 L30 8 L40 0 L50 8 L60 0 L70 8 L80 0 L90 8 L100 0 L110 8 L120 0 L130 8 L140 0 L150 8 L160 0 L170 8 L180 0 L190 8 L200 0 L210 8 L220 0 L230 8 L240 0 L250 8 L260 0 L270 8 L280 0 L290 8 L300 0 L310 8 L320 0 L330 8 L340 0 L350 8 L360 0 L370 8 L380 0 L390 8 L400 0 V20 H0 Z';
@@ -52,7 +56,8 @@ const BOTTOM_EDGE_PATH = 'M0 0 H400 L390 12 L380 20 L370 12 L360 20 L350 12 L340
 
 const loadReceiptSettings = (): ReceiptSettings => {
   try {
-    const saved = window.localStorage.getItem(SETTINGS_KEY);
+    const saved = window.localStorage.getItem(SETTINGS_KEY)
+      || window.localStorage.getItem(LEGACY_SETTINGS_KEY);
     return saved ? { ...DEFAULT_SETTINGS, ...JSON.parse(saved) } : DEFAULT_SETTINGS;
   } catch (error) {
     console.error('Unable to load receipt settings:', error);
@@ -116,8 +121,10 @@ const POSReceiptModal = ({ bill, onClose }: PosReceiptModalProps) => {
   const [settings, setSettings] = useState<ReceiptSettings>(loadReceiptSettings);
   const [copyFeedback, setCopyFeedback] = useState<'copied' | 'downloaded' | 'error' | null>(null);
   const [isCopying, setIsCopying] = useState(false);
+  const [templateFeedback, setTemplateFeedback] = useState<'saved' | 'error' | null>(null);
   const receiptRef = useRef<HTMLDivElement>(null);
   const copyFeedbackTimeout = useRef<number | null>(null);
+  const templateFeedbackTimeout = useRef<number | null>(null);
 
   useEffect(() => {
     try {
@@ -130,6 +137,9 @@ const POSReceiptModal = ({ bill, onClose }: PosReceiptModalProps) => {
   useEffect(() => () => {
     if (copyFeedbackTimeout.current !== null) {
       window.clearTimeout(copyFeedbackTimeout.current);
+    }
+    if (templateFeedbackTimeout.current !== null) {
+      window.clearTimeout(templateFeedbackTimeout.current);
     }
   }, []);
 
@@ -171,6 +181,39 @@ const POSReceiptModal = ({ bill, onClose }: PosReceiptModalProps) => {
   const isPaid = bill?.status === 'settled';
   const note = bill?.notes || bill?.orderNote || bill?.remark || '';
   const billNo = String(bill?.billNo || 'NO-BILL');
+  const barcodeCaption = settings.barcodeCaption.replace(/\{billNo\}/g, billNo);
+
+  const showTemplateFeedback = (feedback: 'saved' | 'error') => {
+    if (templateFeedbackTimeout.current !== null) {
+      window.clearTimeout(templateFeedbackTimeout.current);
+    }
+    setTemplateFeedback(feedback);
+    templateFeedbackTimeout.current = window.setTimeout(() => {
+      setTemplateFeedback(null);
+      templateFeedbackTimeout.current = null;
+    }, 2500);
+  };
+
+  const handleSaveTemplate = () => {
+    try {
+      window.localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+      showTemplateFeedback('saved');
+    } catch (error) {
+      console.error('Unable to save receipt template:', error);
+      showTemplateFeedback('error');
+    }
+  };
+
+  const handleResetTemplate = () => {
+    try {
+      window.localStorage.setItem(SETTINGS_KEY, JSON.stringify(DEFAULT_SETTINGS));
+      setSettings(DEFAULT_SETTINGS);
+      showTemplateFeedback('saved');
+    } catch (error) {
+      console.error('Unable to reset receipt template:', error);
+      showTemplateFeedback('error');
+    }
+  };
 
   const showTemporaryCopyFeedback = (feedback: 'copied' | 'downloaded' | 'error') => {
     if (copyFeedbackTimeout.current !== null) {
@@ -230,7 +273,8 @@ const POSReceiptModal = ({ bill, onClose }: PosReceiptModalProps) => {
     { key: 'thankYou', label: 'Thank-you message' },
     { key: 'wifiName', label: 'Wi-Fi name' },
     { key: 'wifiPassword', label: 'Wi-Fi password' },
-    { key: 'notice', label: 'Return / check policy', multiline: true }
+    { key: 'notice', label: 'Return / check policy', multiline: true },
+    { key: 'barcodeCaption', label: 'ຂໍ້ຄວາມກ້ອງ Barcode (Barcode Caption)' }
   ];
 
   return (
@@ -445,7 +489,7 @@ const POSReceiptModal = ({ bill, onClose }: PosReceiptModalProps) => {
                   <div className="mt-4 text-center">
                     <Barcode value={billNo} />
                     <p className="mt-1 break-all font-mono text-[8px] tracking-[0.12em] text-[#404040]">
-                      LE OUVE WORKSPACE • {billNo}
+                      {barcodeCaption}
                     </p>
                   </div>
 
@@ -500,11 +544,41 @@ const POSReceiptModal = ({ bill, onClose }: PosReceiptModalProps) => {
                         <input
                           value={settings[field.key]}
                           onChange={event => setSettings(current => ({ ...current, [field.key]: event.target.value }))}
+                          placeholder={field.key === 'barcodeCaption' ? 'LE OUVE ATELIER • {billNo}' : undefined}
                           className="mt-1 w-full rounded-lg border border-[#e8e5e0] bg-white px-3 py-2 text-xs font-normal normal-case tracking-normal text-[#1a1a1a] outline-none focus:border-[#4f0303]"
                         />
                       )}
                     </label>
                   ))}
+                  <div className="space-y-2 border-t border-[#e8e5e0] pt-3">
+                    <button
+                      type="button"
+                      onClick={handleSaveTemplate}
+                      className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#4f0303] px-3 py-2.5 text-center text-[10px] font-bold text-white transition hover:bg-[#680404]"
+                    >
+                      {templateFeedback === 'saved'
+                        ? <CheckCircle2 className="h-4 w-4 shrink-0" />
+                        : <Save className="h-4 w-4 shrink-0" />}
+                      <span>
+                        {templateFeedback === 'saved'
+                          ? 'ບັນທຶກສຳເລັດ'
+                          : 'ບັນທຶກເປັນ Template ຖາວອນ (Save Template)'}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleResetTemplate}
+                      className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#e8e5e0] bg-[#faf9f6] px-3 py-2 text-center text-[10px] font-bold text-[#4f0303] transition hover:bg-[#f4f3f0]"
+                    >
+                      <RotateCcw className="h-3.5 w-3.5 shrink-0" />
+                      <span>ຄືນຄ່າເລີ່ມຕົ້ນ (Reset Default)</span>
+                    </button>
+                    {templateFeedback === 'error' && (
+                      <p role="alert" className="text-center text-[10px] font-semibold text-[#4f0303]">
+                        Unable to save receipt template.
+                      </p>
+                    )}
+                  </div>
                 </div>
               </aside>
             )}
